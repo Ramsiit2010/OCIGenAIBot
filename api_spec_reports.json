@@ -1,0 +1,344 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Oracle Analytics Cloud – Workbook Export APIs",
+    "version": "1.0.0",
+    "description": "OpenAPI spec for OAC Workbook Export endpoints (API version 20210901). Includes default values and examples."
+  },
+  "servers": [
+    {
+      "url": "https://{instance}/api/{apiVersion}",
+      "description": "Oracle Analytics Cloud REST base URL",
+      "variables": {
+        "instance": {
+          "default": "oacbi98727502-ocuocictrng30-ia.analytics.ocp.oraclecloud.com",
+          "description": "Your OAC instance host name"
+        },
+        "apiVersion": {
+          "default": "20210901",
+          "description": "API version in the base path"
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/catalog/workbooks/{urlBase64WorkbookId}/exports": {
+      "post": {
+        "summary": "Initiate export of a workbook",
+        "description": "Starts an export job for the specified workbook. Returns an exportId, and optionally status. The caller can later poll or download the export result.",
+        "parameters": [
+          {
+            "name": "urlBase64WorkbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s",
+              "default": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s"
+            },
+            "description": "Workbook ID encoded in Base64 URL-safe format."
+          }
+        ],
+        "requestBody": {
+          "description": "Export request payload with format, pages and optional filters.",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "type": "string",
+                    "enum": ["pdf", "png", "xlsx", "csv"],
+                    "default": "pdf",
+                    "example": "pdf",
+                    "description": "Desired output format for the export."
+                  },
+                  "pages": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "default": ["canvas1"],
+                    "example": ["canvas1","canvas2"],
+                    "description": "List of canvas/page identifiers to include. If omitted, all pages exported."
+                  },
+                  "filters": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "example": {
+                      "Region": "EMEA",
+                      "Year": "2024"
+                    },
+                    "description": "Optional key-value filters to apply before export."
+                  }
+                },
+                "required": ["format"]
+              },
+              "example": {
+                "format": "pdf",
+                "pages": ["canvas1","canvas2"],
+                "filters": {
+                  "Region": "EMEA",
+                  "Department": "Finance"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Export job accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exportId": {
+                      "type": "string",
+                      "example": "e4fa3bcd-1234-5678-abcd-ef0123456789",
+                      "description": "Unique identifier for the export job."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["IN_PROGRESS","COMPLETED","FAILED"],
+                      "default": "IN_PROGRESS",
+                      "example": "IN_PROGRESS",
+                      "description": "Current status of the export job."
+                    },
+                    "links": {
+                      "type": "object",
+                      "properties": {
+                        "self": {
+                          "type": "string",
+                          "example": "https://oacbi98727502-ocuocictrng30-ia.analytics.ocp.oraclecloud.com/api/20210901/catalog/workbooks/L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s/exports/e4fa3bcd-1234-5678-abcd-ef0123456789",
+                          "description": "Link to poll or download export job."
+                        }
+                      }
+                    }
+                  },
+                  "required": ["exportId","status"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request – invalid format or parameters"
+          },
+          "401": {
+            "description": "Unauthorized – invalid/expired token"
+          },
+          "403": {
+            "description": "Forbidden – insufficient privileges"
+          },
+          "500": {
+            "description": "Internal server error during export initiation"
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          }
+        ]
+      }
+    },
+    "/catalog/workbooks/{urlBase64WorkbookId}/exports/{exportId}": {
+      "get": {
+        "summary": "Download export result",
+        "description": "Downloads the exported file (PDF, PNG, XLSX, or CSV) for the workbook export job identified by exportId.",
+        "parameters": [
+          {
+            "name": "urlBase64WorkbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s",
+              "default": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s"
+            },
+            "description": "Workbook ID encoded in Base64 URL-safe format."
+          },
+          {
+            "name": "exportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "e4fa3bcd-1234-5678-abcd-ef0123456789",
+              "default": "e4fa3bcd-1234-5678-abcd-ef0123456789"
+            },
+            "description": "Export job ID returned from the POST /exports request."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful download – returns binary file content.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "example": "Binary PDF data stream"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "example": "Binary PNG data stream"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "example": "Binary XLSX data stream"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary",
+                  "example": "Binary CSV data stream"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request – invalid parameters."
+          },
+          "401": {
+            "description": "Unauthorized – invalid/expired token."
+          },
+          "403": {
+            "description": "Forbidden – insufficient privileges to download."
+          },
+          "404": {
+            "description": "Not found – workbook or exportId does not exist."
+          },
+          "500": {
+            "description": "Internal server error during file retrieval."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          }
+        ]
+      }
+    },
+    "/catalog/workbooks/{urlBase64WorkbookId}/exports/{exportId}/status": {
+      "get": {
+        "summary": "Check export job status",
+        "description": "Poll the status of the export job until it completes, then download from /exports/{exportId}.",
+        "parameters": [
+          {
+            "name": "urlBase64WorkbookId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s",
+              "default": "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s"
+            },
+            "description": "Workbook ID encoded in Base64 URL-safe format."
+          },
+          {
+            "name": "exportId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+                  "example": "e4fa3bcd-1234-5678-abcd-ef0123456789",
+                  "default": "e4fa3bcd-1234-5678-abcd-ef0123456789"
+            },
+            "description": "Export job ID from the POST request."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns current status of export job.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "exportId": {
+                      "type": "string",
+                      "example": "e4fa3bcd-1234-5678-abcd-ef0123456789",
+                      "description": "Export job identifier."
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": ["IN_PROGRESS","COMPLETED","FAILED"],
+                      "default": "IN_PROGRESS",
+                      "example": "COMPLETED",
+                      "description": "Current state of the export job."
+                    },
+                    "completedAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2025-11-07T14:23:45Z",
+                      "description": "Timestamp when export job completed."
+                    },
+                    "errorMessage": {
+                      "type": "string",
+                      "example": null,
+                      "description": "Error message if status is FAILED."
+                    }
+                  },
+                  "required": ["exportId","status"]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request – invalid parameters."
+          },
+          "401": {
+            "description": "Unauthorized – invalid/expired token."
+          },
+          "403": {
+            "description": "Forbidden – insufficient privileges."
+          },
+          "404": {
+            "description": "Not found – workbook or exportId not found."
+          },
+          "500": {
+            "description": "Internal server error during status check."
+          }
+        },
+        "security": [
+          {
+            "oauth2": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "oauth2": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://identity.oraclecloud.com/oauth2/v1/authorize",
+            "tokenUrl": "https://identity.oraclecloud.com/oauth2/v1/token",
+            "scopes": {
+              "oac.catalog.read": "Read workbook/export metadata",
+              "oac.catalog.write": "Initiate workbook export and manage jobs"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {}
+  },
+  "security": [
+    {
+      "oauth2": []
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "ORDS generated API for GENAI_Module - General Agent",
+    "version": "1.0.0",
+    "description": "General purpose AI agent for NLP Queries, routing and general queries"
+  },
+  "servers": [
+    {
+      "url": "https://g741db48c41b919-atpdb.adb.ap-hyderabad-1.oraclecloudapps.com/ords/select_ai_user/genai_module"
+    }
+  ],
+  "paths": {
+    "/query": {
+      "get": {
+        "description": "Retrieve AI-generated response for general queries",
+        "responses": {
+          "200": {
+            "description": "The AI-generated response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "prompt",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "description": "User query to be processed by the AI agent"
+          }
+        ]
+      }
+    }
+  }
+}

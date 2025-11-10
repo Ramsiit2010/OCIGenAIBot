@@ -1,0 +1,155 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Oracle Fusion BI Publisher Report API - Finance Agent",
+    "version": "1.0.1",
+    "description": "Finance-specialized AI agent for executing Oracle Fusion BI Publisher reports. Uses the /xmlpserver/services/rest/v1/reports endpoint to run reports and retrieve Base64-encoded outputs."
+  },
+  "servers": [
+    {
+      "url": "https://fa-euth-dev58-saasfademo1.ds-fa.oraclepdemos.com",
+      "description": "Oracle Fusion Cloud Instance"
+    }
+  ],
+  "paths": {
+    "/xmlpserver/services/rest/v1/reports": {
+      "post": {
+        "summary": "Run BI Publisher Report",
+        "description": "Executes a BI Publisher report with one or more parameters and returns Base64-encoded output.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reportRequest": {
+                    "type": "object",
+                    "properties": {
+                      "reportAbsolutePath": {
+                        "type": "string",
+                        "example": "/Custom/ROIC/ROIC_PO_REPORTS.xdo",
+                        "description": "Full BI Publisher report path within Fusion catalog."
+                      },
+                      "attributeFormat": {
+                        "type": "string",
+                        "enum": ["pdf", "xls", "html", "xml"],
+                        "example": "pdf",
+                        "description": "Desired output format."
+                      },
+                      "parameterNameValues": {
+                        "type": "object",
+                        "properties": {
+                          "item": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "example": "P_PO_NUM",
+                                  "description": "Name of the BI Publisher parameter."
+                                },
+                                "values": {
+                                  "type": "object",
+                                  "properties": {
+                                    "item": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "example": ["55269"],
+                                      "description": "Parameter value(s)."
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "sizeOfDataChunkDownload": {
+                        "type": "integer",
+                        "example": -1,
+                        "description": "Set to -1 to download full report data in one chunk."
+                      }
+                    },
+                    "required": ["reportAbsolutePath", "attributeFormat"]
+                  }
+                },
+                "required": ["reportRequest"],
+                "example": {
+                  "reportRequest": {
+                    "reportAbsolutePath": "/Custom/ROIC/ROIC_PO_REPORTS.xdo",
+                    "attributeFormat": "pdf",
+                    "parameterNameValues": {
+                      "item": [
+                        {
+                          "name": "P_PO_NUM",
+                          "values": {
+                            "item": ["55269"]
+                          }
+                        }
+                      ]
+                    },
+                    "sizeOfDataChunkDownload": -1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Report executed successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reportBytes": {
+                      "type": "string",
+                      "description": "Base64 encoded report output",
+                      "example": "JVBERi0xLjUKJeLjz9MKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoK..."
+                    },
+                    "reportContentType": {
+                      "type": "string",
+                      "example": "application/pdf",
+                      "description": "MIME type of the returned report."
+                    },
+                    "metaDataList": {
+                      "type": "object",
+                      "description": "Optional metadata returned from BI Publisher."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or parameter"
+          },
+          "401": {
+            "description": "Unauthorized (invalid credentials)"
+          },
+          "500": {
+            "description": "Internal server error (REST service issue or disabled)"
+          }
+        },
+        "security": [
+          {
+            "basicAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  }
+}

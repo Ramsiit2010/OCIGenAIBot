@@ -1,0 +1,108 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Oracle Fusion Cloud SCM - Sales Orders API",
+    "version": "1.0.0",
+    "description": "REST API to retrieve sales orders in Oracle Fusion Cloud SCM"
+  },
+  "servers": [
+    {
+      "url": "https://fa-euth-dev58-saasfademo1.ds-fa.oraclepdemos.com/fscmRestApi/resources/11.13.18.05",
+      "description": "Fusion Cloud Instance endpoint"
+    }
+  ],
+  "paths": {
+    "/salesOrdersForOrderHub": {
+      "get": {
+        "summary": "Get list of sales orders",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "default": 10 },
+            "description": "Maximum number of records to return"
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "schema": { "type": "string" },
+            "description": "Comma-separated list of fields to retrieve"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A list of sales orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "OrderKey": { "type": "string" },
+                          "StatusCode": { "type": "string" },
+                          "CreatedBy": { "type": "string" },
+                          "LastUpdateDate": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" },
+          "500": { "description": "Internal server error" }
+        }
+      }
+    },
+    "/salesOrdersForOrderHub/{OrderKey}": {
+      "get": {
+        "summary": "Get one sales order by OrderKey",
+        "parameters": [
+          {
+            "name": "OrderKey",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string","default": "OPS:300000203741093" },
+            "description": "Key of the sales order (SourceOrderSystem:SourceTransactionId) or HeaderId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Sales order details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "OrderKey": { "type": "string" },
+                    "StatusCode": { "type": "string" },
+                    "SubmittedBy": { "type": "string" },
+                    "SubmittedDate": { "type": "string", "format": "date-time" },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "LineNumber": { "type": "integer" },
+                          "ItemNumber": { "type": "string" },
+                          "OrderedQuantity": { "type": "number" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Sales order not found" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    }
+  }
+}
