@@ -747,19 +747,24 @@ template = r"""
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Chat - Advisors</title>
-    <style>
-      body { font-family: Arial, sans-serif; background:#f6f8fb; margin:0; padding:20px }
-      .container { max-width:760px; margin:0 auto; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.06); overflow:hidden }
-      .header { background:#0b5ed7; color:#fff; padding:12px 16px }
-      .messages { height:420px; overflow:auto; padding:12px; border-bottom:1px solid #eee }
-      .msg { margin:8px 0; padding:10px 12px; border-radius:6px; max-width:80%; white-space: pre-wrap; }
-      .msg.user { background:#0b5ed7; color:#fff; margin-left:auto }
-      .msg.agent { background:#f1f5f9; color:#111; margin-right:auto }
-      .input-area { display:flex; gap:8px; padding:12px }
-      .input-area input { flex:1; padding:10px; border-radius:6px; border:1px solid #ddd }
-      .input-area button { padding:10px 14px; background:#0b5ed7; color:#fff; border:none; border-radius:6px }
-      .hint { font-size:12px; color:#666; padding:8px 12px }
-    </style>
+      <style>
+        body { font-family: Arial, sans-serif; background:#f6f8fb; margin:0; padding:20px }
+        .container { max-width:760px; margin:0 auto; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.06); overflow:hidden }
+        .header { background:#0b5ed7; color:#fff; padding:12px 16px }
+        .messages { height:420px; overflow:auto; padding:12px; border-bottom:1px solid #eee }
+        .msg { margin:8px 0; padding:10px 12px; border-radius:6px; max-width:80%; white-space: pre-wrap; }
+        .msg.user { background:#0b5ed7; color:#fff; margin-left:auto }
+        .msg.agent { background:#f1f5f9; color:#111; margin-right:auto }
+        .input-area { display:flex; gap:8px; padding:12px }
+        .input-area input { flex:1; padding:10px; border-radius:6px; border:1px solid #ddd }
+        .input-area button { padding:10px 14px; background:#0b5ed7; color:#fff; border:none; border-radius:6px }
+        .hint { font-size:12px; color:#666; padding:8px 12px }
+        .preview-box { display:none; margin:0 12px 8px; padding:12px; border-radius:6px; border:1px solid #f7c66f; background:#fff8e6; color:#5c3d06; font-size:13px; }
+        .preview-box strong { display:block; margin-bottom:6px; font-size:13px; color:#4a2f04; }
+        .preview-entry { margin:4px 0; line-height:1.4; }
+        .preview-entry .preview-details { display:block; color:#2f2f2f; white-space:pre-wrap; }
+        .preview-entry.invalid { color:#8a1c1c; }
+      </style>
   </head>
   <body>
     <div class="container">
@@ -776,6 +781,7 @@ template = r"""
                         <button onclick="selectSample('Show me Fusion Analytics Dashboards ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📊 Analytic Reports</button>
                         <button onclick="clearChat()" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer; margin-left:auto;">🧹 Clear Chat</button>
                     </div>
+                  <div id="range-preview" class="preview-box" aria-live="polite"></div>
             <div id="messages" class="messages"></div>
       <div class="input-area">
         <input id="input" placeholder="Ask about Finance, HR, Sales, Analytic Reports ..." />
@@ -784,73 +790,268 @@ template = r"""
       <div class="hint">Try: "What's our Finance Reports say ?" Or "Show me about all employee details"</div>
     </div>
 
-    <script>
-      const messagesEl = document.getElementById('messages');
-      const inputEl = document.getElementById('input');
-      const sendBtn = document.getElementById('send');
+      <script>
+        const messagesEl = document.getElementById('messages');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('send');
+        const previewEl = document.getElementById('range-preview');
+        const MAX_PREVIEW_DISPLAY = 5;
 
-      function addMessage(text, cls='agent'){
-        const el = document.createElement('div');
-        el.className = 'msg ' + (cls === 'user' ? 'user' : 'agent');
-        // Replace ** with blank lines for better spacing
-        text = text.replace(/\*\*/g, '');
-        el.textContent = text;
-        messagesEl.appendChild(el);
-        messagesEl.scrollTop = messagesEl.scrollHeight;
-      }
+        function addMessage(text, cls='agent'){
+          const el = document.createElement('div');
+          el.className = 'msg ' + (cls === 'user' ? 'user' : 'agent');
+          // Replace ** with blank lines for better spacing
+          text = text.replace(/\*\*/g, '');
+          el.textContent = text;
+          messagesEl.appendChild(el);
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
 
-                    function selectSample(text, auto=false){
-                        // Populate the input with the sample question. By default do not auto-send.
-                        inputEl.value = text;
-                        inputEl.focus();
-                        if(auto) send();
-                    }
+        function parseRanges(text){
+          const results = [];
+          if(!text) return results;
+          const seen = new Set();
+          const ipRangeRegex = /\b((?:25[0-5]|2[0-4]\d|[01]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)){3})\s*-\s*((?:25[0-5]|2[0-4]\d|[01]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)){3})\b/g;
+          let match;
 
-                    function clearChat(){
-                        messagesEl.innerHTML = '';
-                    }
-
-            async function send(){
-        const prompt = inputEl.value.trim();
-        if(!prompt) return;
-        addMessage(prompt, 'user');
-        inputEl.value = '';
-        addMessage('Thinking...', 'agent');
-
-        try{
-          const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt}) });
-          const data = await res.json();
-          // remove the last 'Thinking...' element
-          const last = messagesEl.querySelectorAll('.msg.agent');
-          if(last.length) last[last.length-1].remove();
-          
-          // Check if response has PDF download
-          if(data.has_pdf && data.download_url){
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'msg agent';
-            msgDiv.innerHTML = data.reply + '<br><br><button onclick="downloadPDF()" style="background:#0b5ed7;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px;">📥 Download PDF Report</button>';
-            messagesEl.appendChild(msgDiv);
-            messagesEl.scrollTop = messagesEl.scrollHeight;
-            window.pdfDownloadUrl = data.download_url;
-          }else{
-            addMessage(data.reply || 'No response from server', 'agent');
+          while((match = ipRangeRegex.exec(text)) !== null){
+            const startIp = match[1];
+            const endIp = match[2];
+            const key = `ip:${startIp}-${endIp}`;
+            if(seen.has(key)) continue;
+            seen.add(key);
+            results.push(buildIpRangeSummary(startIp, endIp));
           }
-        }catch(e){
-          const last = messagesEl.querySelectorAll('.msg.agent');
-          if(last.length) last[last.length-1].remove();
-          addMessage('Error contacting server', 'agent');
-        }
-      }
 
-      function downloadPDF(){
-        if(window.pdfDownloadUrl){
-          window.open(window.pdfDownloadUrl, '_blank');
-        }
-      }
+          const portRangeRegex = /\b(?:ports?|port\s+range|port-range)\b[^0-9]{0,10}(\d{1,5})\s*-\s*(\d{1,5})/gi;
+          while((match = portRangeRegex.exec(text)) !== null){
+            const startPort = parseInt(match[1], 10);
+            const endPort = parseInt(match[2], 10);
+            const key = `port:${startPort}-${endPort}`;
+            if(seen.has(key)) continue;
+            seen.add(key);
+            results.push(buildPortRangeSummary(startPort, endPort));
+          }
 
-    sendBtn.addEventListener('click', send);
-      inputEl.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') send(); });
-    </script>
+          const genericPortRangeRegex = /(\d{1,5})\s*-\s*(\d{1,5})/g;
+          while((match = genericPortRangeRegex.exec(text)) !== null){
+            const startPort = parseInt(match[1], 10);
+            const endPort = parseInt(match[2], 10);
+            const key = `port:${startPort}-${endPort}`;
+            if(seen.has(key)) continue;
+            const prefix = text.slice(Math.max(0, match.index - 20), match.index).toLowerCase();
+            if(!/\bports?\b/.test(prefix)) continue;
+            seen.add(key);
+            results.push(buildPortRangeSummary(startPort, endPort));
+          }
+
+          return results;
+        }
+
+        function buildIpRangeSummary(startIp, endIp){
+          const start = ipToNumber(startIp);
+          const end = ipToNumber(endIp);
+          if(start === null || end === null){
+            return {
+              label: `Invalid IP range ${startIp} - ${endIp}`,
+              preview: 'Unable to parse IP address.',
+              valid: false
+            };
+          }
+
+          if(start > end){
+            return {
+              label: `Invalid IP range ${startIp} - ${endIp}`,
+              preview: 'Start address must be less than or equal to end address.',
+              valid: false
+            };
+          }
+
+          const count = end - start + 1;
+          const preview = formatSequence(start, end, count, 'ip');
+          const label = `IP range ${startIp} - ${endIp} (${count.toLocaleString()} ${pluralize('address', count)})`;
+          return {
+            label,
+            preview: `Preview: ${preview}`,
+            valid: true
+          };
+        }
+
+        function buildPortRangeSummary(startPort, endPort){
+          if(Number.isNaN(startPort) || Number.isNaN(endPort)){
+            return {
+              label: 'Invalid port range',
+              preview: 'Ports must be numeric.',
+              valid: false
+            };
+          }
+
+          if(startPort < 0 || startPort > 65535 || endPort < 0 || endPort > 65535){
+            return {
+              label: `Invalid port range ${startPort}-${endPort}`,
+              preview: 'Ports must be between 0 and 65535.',
+              valid: false
+            };
+          }
+
+          if(startPort > endPort){
+            return {
+              label: `Invalid port range ${startPort}-${endPort}`,
+              preview: 'Start port must be less than or equal to end port.',
+              valid: false
+            };
+          }
+
+          const count = endPort - startPort + 1;
+          const preview = formatSequence(startPort, endPort, count, 'port');
+          const label = `Port range ${startPort}-${endPort} (${count.toLocaleString()} ${pluralize('port', count)})`;
+          return {
+            label,
+            preview: `Preview: ${preview}`,
+            valid: true
+          };
+        }
+
+        function ipToNumber(ip){
+          const parts = ip.split('.').map(Number);
+          if(parts.length !== 4 || parts.some(part => Number.isNaN(part) || part < 0 || part > 255)){
+            return null;
+          }
+          return parts.reduce((acc, part) => (acc * 256) + part, 0);
+        }
+
+        function numberToIp(num){
+          if(!Number.isInteger(num) || num < 0 || num > 4294967295){
+            return '';
+          }
+          const part1 = Math.floor(num / 16777216) % 256;
+          const part2 = Math.floor(num / 65536) % 256;
+          const part3 = Math.floor(num / 256) % 256;
+          const part4 = num % 256;
+          return `${part1}.${part2}.${part3}.${part4}`;
+        }
+
+        function formatSequence(start, end, count, type){
+          const entries = [];
+          const limit = Math.min(count, MAX_PREVIEW_DISPLAY);
+          for(let i = 0; i < limit; i++){
+            const value = type === 'ip' ? numberToIp(start + i) : String(start + i);
+            entries.push(value);
+          }
+          if(count > MAX_PREVIEW_DISPLAY){
+            entries.push('...');
+            entries.push(type === 'ip' ? numberToIp(end) : String(end));
+          }
+          return entries.join(', ');
+        }
+
+        function formatPreviewMessage(entries){
+          const lines = ['🔍 Range preview (local)', ''];
+          entries.forEach(entry => {
+            const prefix = entry.valid ? '• ' : '⚠️ ';
+            lines.push(prefix + entry.label);
+            if(entry.preview){
+              lines.push(`  ${entry.preview}`);
+            }
+          });
+          return lines.join('\n');
+        }
+
+        function pluralize(word, count){
+          if(count === 1) return word;
+          if(word.endsWith('s')){
+            return word + 'es';
+          }
+          return word + 's';
+        }
+
+        function updatePreview(){
+          const text = inputEl.value;
+          const entries = parseRanges(text);
+          if(!entries.length){
+            previewEl.style.display = 'none';
+            previewEl.innerHTML = '';
+            return;
+          }
+
+          let html = '<strong>Detected Range Preview</strong>';
+          entries.forEach(entry => {
+            const cls = entry.valid ? 'preview-entry' : 'preview-entry invalid';
+            html += `<div class="${cls}">${entry.label}`;
+            if(entry.preview){
+              html += `<span class="preview-details">${entry.preview}</span>`;
+            }
+            html += '</div>';
+          });
+          previewEl.innerHTML = html;
+          previewEl.style.display = 'block';
+        }
+
+        function selectSample(text, auto=false){
+          // Populate the input with the sample question. By default do not auto-send.
+          inputEl.value = text;
+          inputEl.focus();
+          updatePreview();
+          if(auto) send();
+        }
+
+        function clearChat(){
+          messagesEl.innerHTML = '';
+          inputEl.value = '';
+          updatePreview();
+          window.pdfDownloadUrl = undefined;
+        }
+
+        async function send(){
+          const prompt = inputEl.value.trim();
+          if(!prompt) return;
+          addMessage(prompt, 'user');
+
+          const previewEntries = parseRanges(prompt);
+          if(previewEntries.length){
+            addMessage(formatPreviewMessage(previewEntries), 'agent');
+          }
+
+          inputEl.value = '';
+          updatePreview();
+          addMessage('Thinking...', 'agent');
+
+          try{
+            const res = await fetch('/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt}) });
+            const data = await res.json();
+            // remove the last 'Thinking...' element
+            const last = messagesEl.querySelectorAll('.msg.agent');
+            if(last.length) last[last.length-1].remove();
+
+            // Check if response has PDF download
+            if(data.has_pdf && data.download_url){
+              const msgDiv = document.createElement('div');
+              msgDiv.className = 'msg agent';
+              msgDiv.innerHTML = data.reply + '<br><br><button onclick="downloadPDF()" style="background:#0b5ed7;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px;">📥 Download PDF Report</button>';
+              messagesEl.appendChild(msgDiv);
+              messagesEl.scrollTop = messagesEl.scrollHeight;
+              window.pdfDownloadUrl = data.download_url;
+            }else{
+              addMessage(data.reply || 'No response from server', 'agent');
+            }
+          }catch(e){
+            const last = messagesEl.querySelectorAll('.msg.agent');
+            if(last.length) last[last.length-1].remove();
+            addMessage('Error contacting server', 'agent');
+          }
+        }
+
+        function downloadPDF(){
+          if(window.pdfDownloadUrl){
+            window.open(window.pdfDownloadUrl, '_blank');
+          }
+        }
+
+        sendBtn.addEventListener('click', send);
+        inputEl.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') send(); });
+        inputEl.addEventListener('input', updatePreview);
+        updatePreview();
+      </script>
   </body>
 </html>
 """
