@@ -1,5 +1,5 @@
 """
-RCOE Gen AI Agents - MCP Server Architecture
+RCOE Gen AI Advisor Systems - MCP Server Architecture
 Uses OCI Generative AI for intent detection and routes to registered MCP servers
 No keyword-based fallback - pure intent-driven routing
 """
@@ -315,7 +315,7 @@ template = r"""
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>RCOE Gen AI Agents</title>
+    <title>RCOE Gen AI Advisor Systems</title>
     <style>
       body { font-family: Arial, sans-serif; background:#f6f8fb; margin:0; padding:20px }
       .container { max-width:760px; margin:0 auto; background:#fff; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.06); overflow:hidden }
@@ -335,14 +335,13 @@ template = r"""
   </head>
   <body>
     <div class="container">
-      <div class="header">RCOE Gen AI Agents - MCP Architecture</div>
-      <div class="subheader">
-        <strong>🚀 Powered by OCI Generative AI Intent Detection</strong><br>
-        5 MCP Servers registered: General, Finance, HR, Orders, Reports<br>
-        Pure intent-driven routing - no keyword fallback
+      <div class="header">RCOE Gen AI Advisor Systems</div>
+      <div style="padding:12px; background:#eef6ff; color:#064e8a;">
+                <strong>Hi there, how may I assist you today !!</strong><br><br>
+                Ask our advisors anything about Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
       </div>
       <div class="samples">
-        <button onclick="selectSample('Show all Customers ?')">🤖 General Help</button>
+        <button onclick="selectSample('Show general data for Customers and their cards ?')">🤖 General Help</button>
         <button onclick="selectSample('Show me Finance Reports ?')">📈 Finance</button>
         <button onclick="selectSample('List employee details ?')">👥 HR</button>
         <button onclick="selectSample('Show sales orders ?')">📦 Orders</button>
@@ -351,10 +350,10 @@ template = r"""
       </div>
       <div id="messages" class="messages"></div>
       <div class="input-area">
-        <input id="input" placeholder="Ask about Finance, HR, Orders, or Reports..." />
+        <input id="input" placeholder="Ask about Finance, HR, Sales Orders, Analytic Reports or General Queries about your data ..." />
         <button id="send">Send</button>
       </div>
-      <div class="hint">Intelligent routing via OCI Gen AI • MCP Server architecture</div>
+      <div class="hint">🚀 Intelligent routing via OCI Gen AI • MCP Server architecture</div>
     </div>
 
     <script>

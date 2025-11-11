@@ -1,4 +1,4 @@
-# RCOE Gen AI Agents - MCP Architecture
+# RCOE Gen AI Advisor Systems (OCI Gen AI & MCP)
 
 ## Overview
 

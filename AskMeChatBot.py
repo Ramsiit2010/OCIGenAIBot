@@ -780,7 +780,7 @@ template = r"""
                 Ask our advisors anything about Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
             </div>
                     <div style="padding:10px 12px; display:flex; gap:8px; flex-wrap:wrap; background:#fafafa;">
-                        <button onclick="selectSample('Show all Customers ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 General Help</button>
+                        <button onclick="selectSample('Show general data for Customers and their cards ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 General Help</button>
                         <button onclick="selectSample('Show me Finance Reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📈 Finance Reports</button>
                         <button onclick="selectSample('List out all employee details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">👥 Employee Reports </button>
                         <button onclick="selectSample('Show me sales Order reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📦 Sales Reports</button>
@@ -789,7 +789,7 @@ template = r"""
                     </div>
             <div id="messages" class="messages"></div>
       <div class="input-area">
-        <input id="input" placeholder="Ask about Finance, HR, Sales, Analytic Reports ..." />
+        <input id="input" placeholder="Ask about Finance, HR, Sales Orders, Analytic Reports or General Queries about your data ..." />
         <button id="send">Send</button>
       </div>
       <div class="hint">Try: "What's our Finance Reports say ?" Or "Show me about all employee details"</div>
