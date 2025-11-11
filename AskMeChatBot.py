@@ -108,7 +108,7 @@ if OCI_AVAILABLE:
         oci_key_file = os.getenv('OCI_KEY_FILE')
         oci_fingerprint = os.getenv('OCI_FINGERPRINT')
         oci_tenancy = os.getenv('OCI_TENANCY')
-        oci_region = os.getenv('OCI_REGION', 'us-ashburn-1')  # Default to ashburn region
+        oci_region = os.getenv('OCI_REGION', 'us-chicago-1')  # Default to ashburn region
         
         if oci_user and oci_key_file and oci_fingerprint and oci_tenancy:
             # Expand ~ in key file path
@@ -120,13 +120,13 @@ if OCI_AVAILABLE:
                 'key_file': key_file_path,
                 'fingerprint': oci_fingerprint,
                 'tenancy': oci_tenancy,
-                'region': 'us-ashburn-1'  # ashburn region for Gen AI
+                'region': 'us-chicago-1'  # ashburn region for Gen AI
             }
             
             # Initialize Gen AI client
             genai_client = GenerativeAiInferenceClient(
                 config=oci_config,
-                service_endpoint=f"https://inference.generativeai.us-ashburn-1.oci.oraclecloud.com"
+                service_endpoint=f"https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
             )
             logger.info("OCI Gen AI client initialized successfully for ashburn region")
         else:
@@ -940,7 +940,7 @@ Answer (one word only):"""
         
         chat_details = ChatDetails(
             serving_mode=OnDemandServingMode(
-                model_id="cohere.command-r-plus"  # Using Cohere Command R Plus
+                model_id="cohere.command-plus-latest"  # Using cohere.command-plus-latest
             ),
             compartment_id=os.getenv('OCI_TENANCY'),
             chat_request=chat_request
