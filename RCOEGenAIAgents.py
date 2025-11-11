@@ -597,4 +597,4 @@ if __name__ == '__main__':
     logger.info(f"MCP Servers: {list(mcp_servers.keys())}")
     logger.info(f"Intent Detection: {'Enabled' if genai_client else 'Disabled'}")
     logger.info("="*60)
-    app.run(host='0.0.0.0', port=5001)
+    app.run(host='0.0.0.0', port=5000)
