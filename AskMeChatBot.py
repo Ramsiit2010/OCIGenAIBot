@@ -101,6 +101,7 @@ CONFIG = load_config()
 
 # Initialize OCI Gen AI Client
 genai_client = None
+genai_region = None
 if OCI_AVAILABLE:
     try:
         # Read OCI config from environment variables
@@ -108,11 +109,17 @@ if OCI_AVAILABLE:
         oci_key_file = os.getenv('OCI_KEY_FILE')
         oci_fingerprint = os.getenv('OCI_FINGERPRINT')
         oci_tenancy = os.getenv('OCI_TENANCY')
-        oci_region = os.getenv('OCI_REGION', 'us-chicago-1')  # Default to ashburn region
+        genai_region = CONFIG.get('genai_region', 'us-chicago-1')
         
         if oci_user and oci_key_file and oci_fingerprint and oci_tenancy:
-            # Expand ~ in key file path
-            key_file_path = os.path.expanduser(oci_key_file)
+            # Resolve key file path - support both absolute and relative paths
+            if os.path.isabs(oci_key_file):
+                key_file_path = oci_key_file
+            elif oci_key_file.startswith('~'):
+                key_file_path = os.path.expanduser(oci_key_file)
+            else:
+                # Relative path - resolve from project directory
+                key_file_path = os.path.join(os.path.dirname(__file__), oci_key_file)
             
             # Create OCI config
             oci_config = {
@@ -120,15 +127,15 @@ if OCI_AVAILABLE:
                 'key_file': key_file_path,
                 'fingerprint': oci_fingerprint,
                 'tenancy': oci_tenancy,
-                'region': 'us-chicago-1'  # ashburn region for Gen AI
+                'region': genai_region
             }
             
             # Initialize Gen AI client
             genai_client = GenerativeAiInferenceClient(
                 config=oci_config,
-                service_endpoint=f"https://inference.generativeai.us-chicago-1.oci.oraclecloud.com"
+                service_endpoint=f"https://inference.generativeai.{genai_region}.oci.oraclecloud.com"
             )
-            logger.info("OCI Gen AI client initialized successfully for ashburn region")
+            logger.info(f"OCI Gen AI client initialized successfully for {genai_region}")
         else:
             logger.warning("OCI credentials not found in .env file. Gen AI intent detection will be skipped.")
     except Exception as e:
@@ -154,6 +161,10 @@ logger.info(f"API retry count: {API_RETRY_COUNT}, delay: {API_RETRY_DELAY}s")
 # Gen AI intent routing mode: 'auto' (default), 'force', or 'off'
 GENAI_INTENT_MODE = CONFIG.get('genai_intent_mode', 'auto').strip().lower()
 logger.info(f"Gen AI intent routing mode: {GENAI_INTENT_MODE}")
+
+# Gen AI model configuration
+GENAI_MODEL_ID = 'cohere.command-plus-latest'
+logger.info(f"Gen AI model: {GENAI_MODEL_ID}")
 
 # Mock responses from sub-agents
 MOCK_RESPONSES = {
@@ -940,13 +951,13 @@ Answer (one word only):"""
         
         chat_details = ChatDetails(
             serving_mode=OnDemandServingMode(
-                model_id="cohere.command-plus-latest"  # Using cohere.command-plus-latest
+                model_id=GENAI_MODEL_ID
             ),
             compartment_id=os.getenv('OCI_TENANCY'),
             chat_request=chat_request
         )
         
-        logger.info(f"Calling OCI Gen AI for intent detection...")
+        logger.info(f"Calling OCI Gen AI for intent detection with model: {GENAI_MODEL_ID}")
         response = genai_client.chat(chat_details)
         
         # Extract the intent from response
