@@ -121,13 +121,13 @@
 python RCOEGenAIAgents.py
 ```
 
-The application will start on **http://localhost:5001**
+The application will start on **http://localhost:5000**
 
 ## 📖 Usage
 
 ### Web Interface
 
-1. Navigate to `http://localhost:5001`
+1. Navigate to `http://localhost:5000`
 2. Use the sample buttons or type your query
 3. Gen AI automatically detects intent and routes to the appropriate advisor
 
@@ -217,14 +217,14 @@ use_mock_responses=true
 
 Check server status:
 ```bash
-curl http://localhost:5001/mcp/servers
+curl http://localhost:5000/mcp/servers
 ```
 
 ### Test Intent Detection
 
 Send test queries and verify routing:
 ```bash
-curl -X POST http://localhost:5001/chat \
+curl -X POST http://localhost:5000/chat \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Show me financial reports"}'
 ```
@@ -266,7 +266,7 @@ Each MCP server logs with its own prefix for easy debugging.
 | Routing | Keyword + Gen AI fallback | Pure Gen AI only |
 | Extensibility | Manual function addition | Add new MCP server class |
 | Testing | Test entire app | Test each server independently |
-| Port | 5000 | 5001 |
+| Port | 5000 | 5000 |
 | Logging | Mixed advisor logs | Server-specific prefixes |
 | Code Organization | ~1100 lines, one file | Modular: base + advisors |
 

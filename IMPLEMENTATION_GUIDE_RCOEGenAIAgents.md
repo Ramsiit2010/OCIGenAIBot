@@ -705,7 +705,7 @@ def test_intent_detection():
 python RCOEGenAIAgents.py
 
 # In another terminal, run tests
-curl -X POST http://localhost:5001/chat \
+curl -X POST http://localhost:5000/chat \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Show me financial reports"}'
 
@@ -714,7 +714,7 @@ curl -X POST http://localhost:5001/chat \
 
 **Verify MCP Server Status:**
 ```bash
-curl http://localhost:5001/mcp/servers
+curl http://localhost:5000/mcp/servers
 ```
 
 Expected output:
@@ -765,7 +765,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-EXPOSE 5001
+EXPOSE 5000
 
 CMD ["python", "RCOEGenAIAgents.py"]
 ```
@@ -773,7 +773,7 @@ CMD ["python", "RCOEGenAIAgents.py"]
 **Build and Run:**
 ```bash
 docker build -t rcoe-genai-agents .
-docker run -p 5001:5001 \
+docker run -p 5000:5000 \
   --env-file .env \
   -v $(pwd)/config.properties:/app/config.properties \
   rcoe-genai-agents
