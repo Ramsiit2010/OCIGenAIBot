@@ -24,7 +24,7 @@
 | **Finance Advisor 💰** | Revenue, budgets, financial reports | BI Publisher SOAP API |
 | **HR Advisor 👥** | Policies, benefits, employee matters | ORDS GenAI Module |
 | **Orders Advisor 📦** | Sales orders, inventory, delivery | Oracle Fusion SCM REST API |
-| **Reports Advisor 📊** | Analytics, dashboards, exports | Oracle Analytics Cloud (OAC) API |
+| **Reports Advisor 📊** | Analytics, dashboards, exports | Oracle Analytics Cloud (OAC) API (30s wait + retries) |
 
 ### 4. **Enterprise Integrations**
 - **Oracle APEX/ORDS**: GenAI Module for General and HR queries

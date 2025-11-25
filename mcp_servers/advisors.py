@@ -345,69 +345,97 @@ class ReportsMCPServer(MCPServer):
         
         try:
             api_version = "20210901"
-            workbook_id = "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s"
+            workbook_id = self.config.get('reports_workbook_id', "L3NoYXJlZC9SQ09FL0Fic2VuY2UgV29ya2Jvb2s")
             export_format = "pdf"
-            pages = ["canvas1"]
             
-            # Step 1: Initiate export
+            # Step 1: Initiate export with default body
             export_url = f"{self.url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports"
-            payload = {"format": export_format, "pages": pages}
+            payload = {
+                "name": "Absence Workbook Report",
+                "type": "file",
+                "canvasIds": ["snapshot!canvas!1"],
+                "format": export_format,
+                "screenwidth": 1440,
+                "screenheight": 900
+            }
             headers = {"Content-Type": "application/json", "Accept": "application/json"}
             auth = HTTPBasicAuth(self.username, self.password)
             
             logger.info(f"[Reports MCP] Initiating export: {export_url}")
+            logger.debug(f"[Reports MCP] Payload: {json.dumps(payload, indent=2)}")
             resp = requests.post(export_url, json=payload, headers=headers, auth=auth, timeout=self.timeout, verify=True)
+            logger.info(f"[Reports MCP] Export response status: {resp.status_code}")
             
-            if resp.status_code != 202:
-                logger.warning(f"[Reports MCP] Export returned {resp.status_code}")
+            if resp.status_code not in (200, 201, 202):
+                logger.warning(f"[Reports MCP] Export returned {resp.status_code}: {resp.text[:300]}")
                 if resp.status_code == 401:
                     return "Reports API authentication failed."
                 return f"Reports export error: HTTP {resp.status_code}"
             
-            export_data = resp.json()
-            export_id = export_data.get('exportId')
-            if not export_id:
-                return "Reports API did not return export ID."
+            export_data = {}
+            try:
+                export_data = resp.json()
+            except Exception:
+                logger.warning("[Reports MCP] Export response not JSON parseable")
             
-            # Step 2: Poll status
-            status_url = f"{self.url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports/{export_id}/status"
-            max_polls = 30
-            poll_interval = 2
-            
-            for attempt in range(max_polls):
-                logger.info(f"[Reports MCP] Polling status (attempt {attempt + 1}/{max_polls})")
-                status_resp = requests.get(status_url, headers={"Accept": "application/json"}, auth=auth, timeout=self.timeout, verify=True)
-                
-                if status_resp.status_code != 200:
-                    return f"Reports status check error: HTTP {status_resp.status_code}"
-                
-                status_data = status_resp.json()
-                status = status_data.get('status')
-                
-                if status == "COMPLETED":
-                    logger.info("[Reports MCP] Export completed")
-                    break
-                elif status == "FAILED":
-                    error_msg = status_data.get('errorMessage', 'Unknown error')
-                    return f"Reports export failed: {error_msg}"
-                elif status == "IN_PROGRESS":
-                    time.sleep(poll_interval)
-                else:
-                    time.sleep(poll_interval)
+            # Parse exportId from resourceUri
+            resource_uri = export_data.get('resourceUri') if isinstance(export_data, dict) else None
+            export_id = None
+            if resource_uri and '/exports/' in resource_uri:
+                export_id = resource_uri.split('/exports/')[-1]
+                logger.info(f"[Reports MCP] Parsed exportId from resourceUri: {export_id}")
             else:
-                return "Reports export timeout."
+                export_id = export_data.get('exportId') if isinstance(export_data, dict) else None
+                if export_id:
+                    logger.info(f"[Reports MCP] Found exportId field: {export_id}")
             
-            # Step 3: Download
+            if not export_id:
+                logger.error(f"[Reports MCP] No exportId derivable from response: {export_data}")
+                return "Reports API did not return an export ID."
+            
+            logger.info(f"[Reports MCP] Export initiated with ID: {export_id}")
+            
+            # Step 2: Wait 30 seconds then attempt download directly (no status check), retry up to 3 times
+            logger.info("[Reports MCP] Waiting 30s before attempting download to allow export job to complete")
+            time.sleep(30)
+            
             download_url = f"{self.url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports/{export_id}"
-            logger.info(f"[Reports MCP] Downloading: {download_url}")
-            download_resp = requests.get(download_url, auth=auth, timeout=self.timeout, verify=True)
+            max_attempts = 3
+            download_resp = None
             
-            if download_resp.status_code != 200:
-                return f"Reports download error: HTTP {download_resp.status_code}"
+            for attempt in range(max_attempts):
+                logger.info(f"[Reports MCP] Download attempt {attempt + 1}/{max_attempts} from {download_url}")
+                try:
+                    download_resp = requests.get(download_url, auth=auth, timeout=self.timeout, verify=True)
+                    logger.info(f"[Reports MCP] Download response status: {download_resp.status_code}")
+                    
+                    if download_resp.status_code == 200:
+                        logger.info("[Reports MCP] Download successful")
+                        break
+                    else:
+                        logger.warning(f"[Reports MCP] Download attempt {attempt + 1} failed with {download_resp.status_code}: {download_resp.text[:300]}")
+                        if attempt < max_attempts - 1:
+                            logger.info("[Reports MCP] Waiting 10s before retry")
+                            time.sleep(10)
+                except requests.exceptions.Timeout:
+                    logger.warning(f"[Reports MCP] Download attempt {attempt + 1} timed out")
+                    if attempt < max_attempts - 1:
+                        logger.info("[Reports MCP] Waiting 10s before retry")
+                        time.sleep(10)
+            
+            if not download_resp or download_resp.status_code != 200:
+                logger.error("[Reports MCP] Download failed after all retry attempts")
+                return "Reports download failed after retries. Please try again later."
             
             report_b64 = base64.b64encode(download_resp.content).decode('utf-8')
-            logger.info(f"[Reports MCP] Report downloaded ({len(report_b64)} chars)")
+            logger.info(f"[Reports MCP] Successfully downloaded report (size: {len(download_resp.content)} bytes, base64 length: {len(report_b64)} chars)")
             return f"REPORT_DOWNLOAD:Reports:{export_format.upper()}:{report_b64}"
+        except requests.exceptions.Timeout:
+            logger.error(f"[Reports MCP] API timeout after {self.timeout}s")
+            return "Reports API timeout. Please try again."
+        except requests.exceptions.RequestException as e:
+            logger.error(f"[Reports MCP] API error: {str(e)}")
+            return f"Reports API error: {str(e)}"
         except Exception as e:
             logger.error(f"[Reports MCP] Error: {e}")
             return f"Reports API error: {str(e)}"

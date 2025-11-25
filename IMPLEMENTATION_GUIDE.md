@@ -27,7 +27,7 @@ OCI_Bot/
 - **General & HR**: Oracle APEX/ORDS GenAI Module (GET with prompt)
 - **Finance**: Oracle Fusion BI Publisher SOAP (ExternalReportWSSService, returns base64 PDF)
 - **Orders**: Oracle Fusion Cloud SCM REST (Sales Orders list/detail)
-- **Reports**: Oracle Analytics Cloud Workbook Export (OAC, poll and download)
+- **Reports**: Oracle Analytics Cloud Workbook Export (OAC, 30s wait + download retries)
 
 Each advisor has a dedicated function in `AskMeChatBot.py` and can be extended with new endpoints or logic.
 

@@ -17,14 +17,14 @@ A Flask-based interactive chat app with specialized advisors for General, Financ
 - Interactive UI with sample prompts and clean formatting
 - Real-time responses with advisor-specific hints
 - Logging System: Detailed INFO logs to console and app.log
-- Pagination UX: Lists show first 10 items with “showing 10 of N” hint
+- Pagination UX: Lists show first 10 items with "showing 10 of N" hint
 
 - Multi-Advisor System: Specialized responses from General, Finance, HR, Orders, and Reports advisors
 - Hybrid API Integration:
     - General & HR: Oracle APEX/ORDS GenAI Module (GET with prompt)
     - Finance: Oracle Fusion BI Publisher SOAP ExternalReportWSSService (base64 PDF)
     - Orders: Oracle Fusion Cloud SCM REST (Sales Orders list/detail)
-    - Reports: Oracle Analytics Cloud Workbook Export (poll and download)
+    - Reports: Oracle Analytics Cloud Workbook Export (30s wait + 3 retry downloads)
 - Intent Routing (dual mode):
     - OCI Gen AI (Chicago) classification → primary (configurable)
     - Keyword-based routing → reliable fallback
@@ -160,11 +160,11 @@ genai_intent_mode=auto  # options: auto | force | off
 API specifics:
 
     - General/HR (ORDS): GET `/query?prompt=...`; JSON may include `query_result`, `response`, `reply`, or `answer`.
-    - Finance (BI Publisher SOAP): POST SOAP XML to `/xmlpserver/services/ExternalReportWSSService`; returns `<reportBytes>` (base64 PDF). The UI exposes a “Download PDF Report” button.
+    - Finance (BI Publisher SOAP): POST SOAP XML to `/xmlpserver/services/ExternalReportWSSService`; returns `<reportBytes>` (base64 PDF). The UI exposes a "Download PDF Report" button.
     - Orders (Fusion SCM REST):
         - List: GET `/salesOrdersForOrderHub?limit=10` then sort by latest `LastUpdateDate` client-side.
         - Detail: GET `/salesOrdersForOrderHub/{OrderKeyOrId}` when prompt contains an OrderKey or long numeric ID.
-    - Reports (OAC Workbook Export): Initiate export → poll status until COMPLETED → download.
+    - Reports (OAC Workbook Export): Initiate export → wait 30s → download with 3 retry attempts (10s intervals).
 
 Restart the application to load new configuration
 

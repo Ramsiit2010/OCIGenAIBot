@@ -612,8 +612,7 @@ def get_general_advice(query: str) -> str:
 def get_reports_advice(query: str) -> str:
     """Reports Advisor - calls Oracle Analytics Cloud Workbook Export API or returns mock response"""
     logger.info(f"Reports advisor processing query: {query}")
-    
-    # If using mock responses, skip API call
+
     if USE_MOCK_RESPONSES:
         logger.info("Reports advisor using mock response (USE_MOCK_RESPONSES=True)")
         ql = query.lower()
@@ -621,122 +620,111 @@ def get_reports_advice(query: str) -> str:
             if keyword in ql:
                 logger.info(f"Reports advisor matched keyword: {keyword}")
                 return response
-        logger.info("Reports advisor using default mock response")
         return MOCK_RESPONSES["reports"]["analytics"]
-    
-    # Read Reports API config
+
     reports_url = CONFIG.get('reports_agent_url')
     reports_username = CONFIG.get('reports_agent_username')
     reports_password = CONFIG.get('reports_agent_password')
-    
+
     if not reports_url:
         logger.warning("Reports agent URL not configured")
-        # Fall back to mock
         ql = query.lower()
         for keyword, response in MOCK_RESPONSES["reports"].items():
             if keyword in ql:
                 return response
         return MOCK_RESPONSES["reports"]["analytics"]
-    
+
     if not reports_username or not reports_password:
         logger.warning("Reports agent credentials not configured")
         return "Reports API credentials not configured. Please check config.properties."
-    
+
     try:
-        # Use default values from API spec
         api_version = "20210901"
-        workbook_id = "L3NoYXJlZC9ST0lDL0Fic2VuY2UgV29ya2Jvb2s"  # Default from spec
+        workbook_id = CONFIG.get('reports_workbook_id', "L3NoYXJlZC9SQ09FL0Fic2VuY2UgV29ya2Jvb2s")
         export_format = "pdf"
-        pages = ["canvas1"]
-        
-        # Step 1: Initiate export (POST)
+
         export_url = f"{reports_url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports"
         payload = {
+            "name": "Absence Workbook Report",
+            "type": "file",
+            "canvasIds": ["snapshot!canvas!1"],
             "format": export_format,
-            "pages": pages
+            "screenwidth": 1440,
+            "screenheight": 900
         }
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        # OAC uses Basic Auth
+
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
         auth = HTTPBasicAuth(reports_username, reports_password)
-        
+
         logger.info(f"Calling Reports API (export) at {export_url}")
         logger.debug(f"Request payload: {json.dumps(payload, indent=2)}")
-        
         resp = requests.post(export_url, json=payload, headers=headers, auth=auth, timeout=API_TIMEOUT, verify=True)
         logger.info(f"Reports export response status: {resp.status_code}")
-        
-        if resp.status_code != 202:
+
+        if resp.status_code not in (200, 201, 202):
             logger.warning(f"Reports export API returned {resp.status_code}: {resp.text[:300]}")
             if resp.status_code == 401:
                 return "Reports API authentication failed. Please verify username/password in config.properties."
-            else:
-                return f"Reports export API error: HTTP {resp.status_code}"
-        
-        export_data = resp.json()
-        export_id = export_data.get('exportId')
-        if not export_id:
-            logger.error(f"No exportId in response: {export_data}")
-            return "Reports API did not return an export ID."
-        
-        logger.info(f"Export initiated with ID: {export_id}")
-        
-        # Step 2: Poll status until COMPLETED
-        status_url = f"{reports_url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports/{export_id}/status"
-        max_polls = 30
-        poll_interval = 2  # seconds
-        
-        for attempt in range(max_polls):
-            logger.info(f"Polling export status (attempt {attempt + 1}/{max_polls})")
-            status_resp = requests.get(status_url, headers={"Accept": "application/json"}, auth=auth, timeout=API_TIMEOUT, verify=True)
-            
-            if status_resp.status_code != 200:
-                logger.warning(f"Status poll failed with {status_resp.status_code}: {status_resp.text[:200]}")
-                return f"Reports status check error: HTTP {status_resp.status_code}"
-            
-            status_data = status_resp.json()
-            status = status_data.get('status')
-            logger.info(f"Export status: {status}")
-            
-            if status == "COMPLETED":
-                logger.info("Export completed successfully")
-                break
-            elif status == "FAILED":
-                error_msg = status_data.get('errorMessage', 'Unknown error')
-                logger.error(f"Export failed: {error_msg}")
-                return f"Reports export failed: {error_msg}"
-            elif status == "IN_PROGRESS":
-                time.sleep(poll_interval)
-            else:
-                logger.warning(f"Unexpected status: {status}")
-                time.sleep(poll_interval)
+            return f"Reports export API error: HTTP {resp.status_code}"
+
+        export_data = {}
+        try:
+            export_data = resp.json()
+        except Exception:
+            logger.warning("Export response not JSON parseable; attempting resourceUri extraction from text")
+
+        resource_uri = export_data.get('resourceUri') if isinstance(export_data, dict) else None
+        export_id = None
+        if resource_uri and '/exports/' in resource_uri:
+            export_id = resource_uri.split('/exports/')[-1]
+            logger.info(f"Parsed exportId from resourceUri: {export_id}")
         else:
-            # Max polls reached
-            logger.error("Export did not complete within polling limit")
-            return "Reports export timeout. Please try again later."
+            export_id = export_data.get('exportId') if isinstance(export_data, dict) else None
+            if export_id:
+                logger.info(f"Found exportId field: {export_id}")
+
+        if not export_id:
+            logger.error(f"No exportId derivable from response: {export_data}")
+            return "Reports API did not return an export ID."
+
+        logger.info(f"Export initiated with ID: {export_id}")
+
+        # Wait 30 seconds then attempt download directly (no status check), retry up to 3 times
+        logger.info("Waiting 30s before attempting download to allow export job to complete")
+        time.sleep(30)
         
-        # Step 3: Download the file (GET)
         download_url = f"{reports_url}/api/{api_version}/catalog/workbooks/{workbook_id}/exports/{export_id}"
-        logger.info(f"Downloading export from {download_url}")
+        max_attempts = 3
+        download_resp = None
         
-        download_resp = requests.get(download_url, auth=auth, timeout=API_TIMEOUT, verify=True)
-        logger.info(f"Download response status: {download_resp.status_code}")
+        for attempt in range(max_attempts):
+            logger.info(f"Download attempt {attempt + 1}/{max_attempts} from {download_url}")
+            try:
+                download_resp = requests.get(download_url, auth=auth, timeout=API_TIMEOUT, verify=True)
+                logger.info(f"Download response status: {download_resp.status_code}")
+                
+                if download_resp.status_code == 200:
+                    logger.info("Download successful")
+                    break
+                else:
+                    logger.warning(f"Download attempt {attempt + 1} failed with {download_resp.status_code}: {download_resp.text[:300]}")
+                    if attempt < max_attempts - 1:
+                        logger.info("Waiting 10s before retry")
+                        time.sleep(10)
+            except requests.exceptions.Timeout:
+                logger.warning(f"Download attempt {attempt + 1} timed out")
+                if attempt < max_attempts - 1:
+                    logger.info("Waiting 10s before retry")
+                    time.sleep(10)
         
-        if download_resp.status_code != 200:
-            logger.warning(f"Download failed with {download_resp.status_code}: {download_resp.text[:300]}")
-            return f"Reports download error: HTTP {download_resp.status_code}"
-        
-        # Convert binary to base64
+        if not download_resp or download_resp.status_code != 200:
+            logger.error("Download failed after all retry attempts")
+            return "Reports download failed after retries. Please try again later."
+
         report_bytes_b64 = base64.b64encode(download_resp.content).decode('utf-8')
         logger.info(f"Successfully downloaded report (size: {len(download_resp.content)} bytes, base64 length: {len(report_bytes_b64)} chars)")
-        
-        # Return special marker for UI download flow with advisor name
         return f"REPORT_DOWNLOAD:Reports:{export_format.upper()}:{report_bytes_b64}"
-        
+
     except requests.exceptions.Timeout:
         logger.error(f"Reports API timeout after {API_TIMEOUT}s")
         return "Reports API timeout. Please try again."
@@ -780,7 +768,7 @@ template = r"""
                 Ask our advisors anything about Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
             </div>
                     <div style="padding:10px 12px; display:flex; gap:8px; flex-wrap:wrap; background:#fafafa;">
-                        <button onclick="selectSample('GENERAL: Translate to SQL: list all active customers details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 General Help</button>
+                        <button onclick="selectSample('GENERAL: Translate to SQL: list all customers details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 General Help</button>
                         <button onclick="selectSample('Show me Finance Reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📈 Finance Reports</button>
                         <button onclick="selectSample('List out all employee details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">👥 Employee Reports </button>
                         <button onclick="selectSample('Show me sales Order reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📦 Sales Reports</button>

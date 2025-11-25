@@ -597,44 +597,56 @@ return format_order_details(order_data)
 
 ### 4. Oracle Analytics Cloud (Reports)
 
-**3-Step Process:**
+**2-Step Process (No Status Polling):**
 
 **Step 1: Initiate Export**
 ```python
 export_url = f"{base_url}/api/20210901/catalog/workbooks/{workbook_id}/exports"
 payload = {
+    "name": "Absence Workbook Report",
+    "type": "file",
+    "canvasIds": ["snapshot!canvas!1"],
     "format": "pdf",
-    "pages": ["canvas1"]
+    "screenwidth": 1440,
+    "screenheight": 900
 }
 
 response = requests.post(export_url, json=payload, auth=auth)
-export_id = response.json()['exportId']
+# Parse exportId from resourceUri field
+resource_uri = response.json()['resourceUri']
+export_id = resource_uri.split('/exports/')[-1]
 ```
 
-**Step 2: Poll Status**
+**Step 2: Wait and Download with Retries**
 ```python
-status_url = f"{base_url}/api/20210901/catalog/workbooks/{workbook_id}/exports/{export_id}/status"
+# Wait 30 seconds for export job to complete
+time.sleep(30)
 
-for attempt in range(30):
-    status_response = requests.get(status_url, auth=auth)
-    status = status_response.json()['status']
-    
-    if status == "COMPLETED":
-        break
-    elif status == "FAILED":
-        raise Exception("Export failed")
-    
-    time.sleep(2)
-```
-
-**Step 3: Download**
-```python
+# Attempt download with up to 3 retries
 download_url = f"{base_url}/api/20210901/catalog/workbooks/{workbook_id}/exports/{export_id}"
-download_response = requests.get(download_url, auth=auth)
+max_attempts = 3
 
-report_base64 = base64.b64encode(download_response.content).decode('utf-8')
-return f"REPORT_DOWNLOAD:Reports:PDF:{report_base64}"
+for attempt in range(max_attempts):
+    download_response = requests.get(download_url, auth=auth, timeout=30)
+    
+    if download_response.status_code == 200:
+        report_base64 = base64.b64encode(download_response.content).decode('utf-8')
+        return f"REPORT_DOWNLOAD:Reports:PDF:{report_base64}"
+    
+    # Wait 10 seconds before retry (if not last attempt)
+    if attempt < max_attempts - 1:
+        time.sleep(10)
+
+# If all retries fail
+raise Exception("Report download failed after all retry attempts")
 ```
+
+**Key Changes:**
+- **No status polling**: Removed intermediate status check endpoint
+- **30-second wait**: Single wait period after export initiation
+- **3 download retries**: Direct download attempts with 10-second intervals
+- **Enhanced payload**: Includes name, type, canvasIds, screenwidth, and screenheight
+- **exportId extraction**: Parsed from resourceUri response field
 
 ---
 
