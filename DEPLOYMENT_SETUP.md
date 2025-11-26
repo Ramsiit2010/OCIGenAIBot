@@ -68,11 +68,11 @@ Edit `.env` with your credentials:
 OCI_USER_OCID=ocid1.user.oc1..aaaaaaa...
 OCI_TENANCY_OCID=ocid1.tenancy.oc1..aaaaaaa...
 OCI_FINGERPRINT=ab:cd:ef:12:34:56...
-OCI_REGION=us-chicago-1
+OCI_REGION=us-ashburn-1
 OCI_KEY_FILE=oci_api_key.pem
 
 # Gen AI Configuration
-GENAI_REGION=us-chicago-1
+GENAI_REGION=us-ashburn-1
 GENAI_MODEL=cohere.command-plus-latest
 GENAI_INTENT_MODE=force
 ```
@@ -161,7 +161,7 @@ oci fn application create \
 1. Navigate to AI Services → Generative AI Agents
 2. Create Agent:
    - Model: cohere.command-plus-latest
-   - Region: us-chicago-1
+   - Region: us-ashburn-1 (default)
 3. Deploy and note the `agentEndpointId`
 
 ### 5. Update Function Configuration
@@ -169,9 +169,9 @@ oci fn application create \
 **Edit `func_askme.yaml` or `func_rcoe.yaml`:**
 ```yaml
 config:
-  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-chicago-1.amaaa...
+  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaa...
   genaiIntentMode: auto  # or force
-  genaiRegion: us-chicago-1
+  genaiRegion: us-ashburn-1
 ```
 
 ### 6. Deploy Function

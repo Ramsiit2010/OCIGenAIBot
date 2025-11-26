@@ -93,11 +93,11 @@ oci setup config
 2. **Create Agent**:
    - Name: `multi-advisor-agent` or similar
    - Model: `cohere.command-plus-latest`
-   - Region: `us-chicago-1`
+   - Region: `us-ashburn-1` (default, configurable)
 
 3. **Deploy Agent** and copy the **Agent Endpoint OCID**:
    ```
-   ocid1.genaiagentendpoint.oc1.us-chicago-1.amaaaaaa...
+   ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
    ```
 
 ### Step 2: Create Functions Application
@@ -140,7 +140,7 @@ fn create context <region-key> --provider oracle
 fn update context oracle.compartment-id ocid1.compartment.oc1..aaaaaa...
 
 # Set API URL
-fn update context api-url https://functions.us-chicago-1.oraclecloud.com
+fn update context api-url https://functions.us-ashburn-1.oraclecloud.com
 
 # Set registry (OCIR)
 fn update context registry iad.ocir.io/<tenancy-namespace>/<repo-name>
@@ -168,17 +168,17 @@ Generate auth token:
 **Edit `func_askme.yaml`:**
 ```yaml
 config:
-  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-chicago-1.amaaaaaa...
+  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
   genaiIntentMode: auto
-  genaiRegion: us-chicago-1
+  genaiRegion: us-ashburn-1
 ```
 
 **Edit `func_rcoe.yaml`:**
 ```yaml
 config:
-  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-chicago-1.amaaaaaa...
+  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
   genaiIntentMode: force
-  genaiRegion: us-chicago-1
+  genaiRegion: us-ashburn-1
 ```
 
 ### Step 6: Create Dynamic Group for Resource Principal
@@ -301,7 +301,7 @@ Function: rcoe-genai-agents-app-fn
 ### 3. Test via API Gateway
 
 ```bash
-curl -X POST https://your-gateway-id.apigateway.us-chicago-1.oci.customer-oci.com/api/v1/chat/askme \
+curl -X POST https://your-gateway-id.apigateway.us-ashburn-1.oci.customer-oci.com/api/v1/chat/askme \
   -H "Content-Type: application/json" \
   -d '{
     "sessionId": "web-session-001",

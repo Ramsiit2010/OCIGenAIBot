@@ -1,6 +1,12 @@
 # Enterprise Advisory Chat Bot
 
-A Flask-based interactive chat app with specialized advisors for General, Finance, HR, Orders, and Reports. Integrates with Oracle APEX/ORDS (General/HR), Oracle Fusion BI Publisher SOAP (Finance, PDF reports), Oracle Fusion Cloud SCM REST (Orders), and Oracle Analytics Cloud Workbook Export (Reports). Supports optional OCI Generative AI intent detection (Chicago region) with keyword fallback.
+A Flask-based interactive chat app with specialized advisors for General, Finance, HR, Orders, and Reports. Integrates with Oracle APEX/ORDS (General/HR for NL2SQL + data queries), Oracle Fusion BI Publisher SOAP (Finance, PDF reports), Oracle Fusion Cloud SCM REST (Orders), and Oracle Analytics Cloud Workbook Export (Reports). 
+
+**General Agent** uses dual-mode intelligence:
+- **ORDS NL2SQL** for database queries (list/show/count/etc.)
+- **OCI Gen AI Inference** for general knowledge (explanations, definitions)
+
+Supports OCI Generative AI intent detection (Ashburn region) with keyword fallback. See [GENERAL_AGENT_ARCHITECTURE.md](GENERAL_AGENT_ARCHITECTURE.md) for details.
 
 ## 🌟 Features
 
@@ -11,7 +17,7 @@ A Flask-based interactive chat app with specialized advisors for General, Financ
     - Orders: Oracle Fusion Cloud SCM REST (Sales Orders list/detail)
     - Reports: Oracle Analytics Cloud Workbook Export (poll and download)
 - Intent Routing (dual mode):
-    - OCI Gen AI (Chicago) classification → primary (configurable)
+    - OCI Gen AI (Ashburn) classification → primary (configurable)
     - Keyword-based routing → reliable fallback
 - Server-side download storage: Avoids cookie limits; robust retryable downloads
 - Interactive UI with sample prompts and clean formatting
@@ -26,7 +32,7 @@ A Flask-based interactive chat app with specialized advisors for General, Financ
     - Orders: Oracle Fusion Cloud SCM REST (Sales Orders list/detail)
     - Reports: Oracle Analytics Cloud Workbook Export (30s wait + 3 retry downloads)
 - Intent Routing (dual mode):
-    - OCI Gen AI (Chicago) classification → primary (configurable)
+    - OCI Gen AI (Ashburn) classification → primary (configurable)
     - Keyword-based routing → reliable fallback
 - Server-side download storage: Avoids cookie limits; robust retryable downloads
 - Interactive UI with sample prompts and clean formatting
@@ -104,7 +110,7 @@ Orders behavior:
 Sample questions are provided in the UI for quick testing.
 
 Intent routing:
-- If OCI Gen AI is enabled and reachable, the app first attempts single-advisor intent classification (Chicago region) and routes accordingly (mode = `auto` or `force`).
+- If OCI Gen AI is enabled and reachable, the app first attempts single-advisor intent classification (Ashburn region, us-ashburn-1) and routes accordingly (mode = `auto` or `force`).
 - If detection is disabled or inconclusive, keyword-based routing runs and may invoke multiple advisors when multiple domains are detected.
 
 ## 🔧 Customization Guide
@@ -170,18 +176,18 @@ Restart the application to load new configuration
 
 ### OCI Generative AI (.env)
 
-Provide OCI credentials used to initialize the Generative AI Inference client (Chicago region):
+Provide OCI credentials used to initialize the Generative AI Inference client (Ashburn region, us-ashburn-1):
 
 ```env
 OCI_USER=ocid1.user.oc1..xxxx
 OCI_KEY_FILE=~/.oci/oci_api_key.pem
 OCI_FINGERPRINT=aa:bb:cc:...
 OCI_TENANCY=ocid1.tenancy.oc1..xxxx
-OCI_REGION=us-chicago-1
+OCI_REGION=us-ashburn-1
 ```
 
 Notes:
-- The client is created against `https://inference.generativeai.us-chicago-1.oci.oraclecloud.com`.
+- The client is created against `https://inference.generativeai.us-ashburn-1.oci.oraclecloud.com`.
 - Set `genai_intent_mode=auto|force|off` in `config.properties` to control usage.
 
 ### Modifying Mock Responses
@@ -271,7 +277,7 @@ The application logs activities to:
 
 Key run-time lines:
 
-- `OCI Gen AI client initialized successfully for Chicago region`
+- `OCI Gen AI client initialized successfully for Ashburn region (us-ashburn-1)`
 - `Gen AI intent routing mode: auto|force|off`
 - (When active) `Attempting OCI Gen AI intent detection...` and `Gen AI detection result: <intent>`
 - Fallback path: `Using keyword-based routing (Gen AI not available or failed)`

@@ -10,4 +10,4 @@ timeout: 120
 config:
   agentEndpointId: <agent-endpoint-id>
   genaiIntentMode: auto
-  genaiRegion: us-chicago-1
+  genaiRegion: us-ashburn-1

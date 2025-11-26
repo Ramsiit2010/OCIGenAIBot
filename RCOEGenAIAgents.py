@@ -282,9 +282,56 @@ def route_to_mcp_server(prompt: str) -> Dict:
     if detected_intent in mcp_servers:
         server = mcp_servers[detected_intent]
         logger.info(f"[Routing] Routing to MCP server: {server.name}")
-        
-        response = server.handle_request(prompt)
-        
+
+        # Special handling for 'general': NL2SQL via ORDS vs. general knowledge via OCI Gen AI
+        if detected_intent == 'general':
+            # Detect database-style queries (NL2SQL)
+            database_keywords = [
+                'list', 'show', 'get', 'find', 'search', 'query', 'select', 'count', 'sum', 'average',
+                'table', 'database', 'record', 'data', 'customer', 'employee', 'product', 'item',
+                'all', 'total', 'how many', 'sql', 'translate'
+            ]
+            ql = prompt.lower()
+            is_database_query = any(k in ql for k in database_keywords)
+
+            if is_database_query:
+                # Route to ORDS GenAI Module via General MCP Server
+                logger.info("[Routing] Detected database-style query → ORDS (General MCP)")
+                response = server.handle_request(prompt)
+            else:
+                # Use OCI Gen AI Inference for general knowledge if available
+                if genai_client:
+                    try:
+                        logger.info(f"[Routing] Using OCI Gen AI for general knowledge with model: {GENAI_MODEL_ID}")
+                        chat_request = CohereChatRequest(
+                            message=prompt,
+                            max_tokens=500,
+                            temperature=0.7,
+                            frequency_penalty=0,
+                            top_p=0.75,
+                            top_k=0
+                        )
+                        chat_details = ChatDetails(
+                            serving_mode=OnDemandServingMode(model_id=GENAI_MODEL_ID),
+                            compartment_id=os.getenv('OCI_TENANCY'),
+                            chat_request=chat_request
+                        )
+                        chat_response = genai_client.chat(chat_details)
+                        if chat_response.data and chat_response.data.chat_response:
+                            response = chat_response.data.chat_response.text.strip()
+                        else:
+                            logger.warning("[Routing] Gen AI returned no content; falling back to ORDS General MCP")
+                            response = server.handle_request(prompt)
+                    except Exception as e:
+                        logger.error(f"[Routing] Gen AI error for general knowledge: {e}; falling back to ORDS General MCP")
+                        response = server.handle_request(prompt)
+                else:
+                    logger.warning("[Routing] Gen AI client unavailable; using ORDS General MCP")
+                    response = server.handle_request(prompt)
+        else:
+            # Non-general intents handled by their respective MCP servers
+            response = server.handle_request(prompt)
+
         # Format advisor label
         advisor_labels = {
             'general': 'General Agent 🤖',
@@ -293,7 +340,7 @@ def route_to_mcp_server(prompt: str) -> Dict:
             'orders': 'Orders Advisor 📦',
             'reports': 'Reports Advisor 📊'
         }
-        
+
         return {
             "advisor": advisor_labels.get(detected_intent, detected_intent.capitalize()),
             "response": response,
@@ -335,17 +382,17 @@ template = r"""
   </head>
   <body>
     <div class="container">
-      <div class="header">RCOE Gen AI Advisor Systems</div>
+      <div class="header">RCOE Enterprise Advisors</div>
       <div style="padding:12px; background:#eef6ff; color:#064e8a;">
                 <strong>Hi there, how may I assist you today !!</strong><br><br>
-                Ask our advisors anything about Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
+                Ask our advisors anything about Your Data, Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
       </div>
       <div class="samples">
-        <button onclick="selectSample('Show general data for Customers and their cards ?')">🤖 General Help</button>
-        <button onclick="selectSample('Show me Finance Reports ?')">📈 Finance</button>
-        <button onclick="selectSample('List employee details ?')">👥 HR</button>
-        <button onclick="selectSample('Show sales orders ?')">📦 Orders</button>
-        <button onclick="selectSample('Show Analytics Dashboards ?')">📊 Reports</button>
+        <button onclick="selectSample('GENERAL: Translate to SQL: list all customers details ?')">🤖 Talk With Data </button>
+        <button onclick="selectSample('Show me Finance Reports ?')">📈 Finance Reports </button>
+        <button onclick="selectSample('List employee details ?')">👥 Employee Reports </button>
+        <button onclick="selectSample('Show sales orders ?')">📦 Sales Reports </button>
+        <button onclick="selectSample('Show Analytics Dashboards ?')">📊 Analytic Reports </button>
         <button onclick="clearChat()" style="margin-left:auto;">🧹 Clear</button>
       </div>
       <div id="messages" class="messages"></div>
@@ -353,6 +400,7 @@ template = r"""
         <input id="input" placeholder="Ask about Finance, HR, Sales Orders, Analytic Reports or General Queries about your data ..." />
         <button id="send">Send</button>
       </div>
+      <div class="hint">Try: "What's our Finance Reports say ?" Or "Show me about all employee details"</div>
       <div class="hint">🚀 Intelligent routing via OCI Gen AI • MCP Server architecture</div>
     </div>
 

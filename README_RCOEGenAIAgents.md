@@ -4,6 +4,13 @@
 
 **RCOEGenAIAgents** is an intelligent, enterprise-grade multi-advisor system built on **Model Context Protocol (MCP)** architecture with **pure OCI Generative AI intent-based routing**. Unlike traditional keyword-based routing, this application uses Oracle Cloud Infrastructure's Generative AI service to intelligently understand user intent and route queries to specialized advisory agents.
 
+**General Agent** (MCP Server) uses dual-mode intelligence:
+- **ORDS NL2SQL** for database/data queries (list/show/count/etc.)
+- **OCI Gen AI Inference** (cohere.command-plus-latest) for general knowledge
+- Keyword fallbacks for help/capabilities when APIs unavailable
+
+See [GENERAL_AGENT_ARCHITECTURE.md](GENERAL_AGENT_ARCHITECTURE.md) for complete dual-mode architecture details.
+
 ## 🌟 Key Features
 
 ### 1. **Pure Gen AI Intent Detection**
@@ -51,7 +58,7 @@
                     ┌─────────────────┐
                     │  OCI Gen AI     │
                     │  Intent Detector│
-                    │  (Chicago-1)    │
+                    │  (Ashburn-1)    │
                     └─────────────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -75,7 +82,7 @@
 1. **Python 3.8+**
 2. **OCI SDK**: `pip install oci`
 3. **Flask**: `pip install flask python-dotenv requests`
-4. **OCI Account** with Gen AI access in `us-chicago-1` region
+4. **OCI Account** with Gen AI access in `us-ashburn-1` region (default, configurable)
 5. **Backend API Access**:
    - Oracle APEX/ORDS endpoints
    - BI Publisher instance
@@ -105,7 +112,7 @@
 
 4. **Configure application** (`config.properties`)
    ```properties
-   genai_region=us-chicago-1
+   genai_region=us-ashburn-1
    use_mock_responses=false
    api_timeout=30
    
@@ -174,7 +181,7 @@ List all registered MCP servers
     // ... other servers
   ],
   "genai_enabled": true,
-  "genai_region": "us-chicago-1"
+  "genai_region": "us-ashburn-1"
 }
 ```
 
@@ -184,7 +191,7 @@ List all registered MCP servers
 
 ```properties
 # config.properties
-genai_region=us-chicago-1          # OCI Gen AI region
+genai_region=us-ashburn-1          # OCI Gen AI region (default)
 genai_intent_mode=force            # force|auto|off
 ```
 
@@ -240,7 +247,7 @@ Use the sample buttons in the web UI to test all 5 advisors.
 Logs are written to `rcoe_genai_agents.log` with the following format:
 
 ```
-2025-11-11 10:30:15 - INFO - ✓ OCI Gen AI client initialized for us-chicago-1
+2025-11-11 10:30:15 - INFO - ✓ OCI Gen AI client initialized for us-ashburn-1
 2025-11-11 10:30:15 - INFO - ✓ 5 MCP servers registered: ['general', 'finance', 'hr', 'orders', 'reports']
 2025-11-11 10:30:20 - INFO - [Routing] Processing query: Show me finance reports
 2025-11-11 10:30:21 - INFO - [Intent Detection] Calling Gen AI with model: cohere.command-plus-latest
@@ -278,8 +285,8 @@ Each MCP server logs with its own prefix for easy debugging.
 
 **Solutions**:
 1. Check OCI credentials in `.env`
-2. Verify `genai_region=us-chicago-1` in `config.properties`
-3. Ensure OCI tenancy has access to Gen AI in Chicago region
+2. Verify `genai_region=us-ashburn-1` in `config.properties`
+3. Ensure OCI tenancy has access to Gen AI in Ashburn region (us-ashburn-1)
 4. Check logs for API errors
 
 ### MCP Server Not Registering

@@ -24,22 +24,67 @@ OCI_Bot/
 
 ## 2. Advisors & Integrations
 
-- **General & HR**: Oracle APEX/ORDS GenAI Module (GET with prompt)
+- **General (Dual-Mode)**: 
+  - **Database Queries**: Oracle APEX/ORDS NL2SQL GenAI Module (natural language to SQL translation)
+  - **Knowledge Questions**: OCI Gen AI Inference API (cohere.command-plus-latest)
+  - **Fallback Chain**: ORDS → Gen AI → Keyword responses → Error
+  - **Detection**: 30+ database keywords (list, show, get, find, count, sum, etc.)
+  - See [GENERAL_AGENT_ARCHITECTURE.md](GENERAL_AGENT_ARCHITECTURE.md) for complete technical details
+- **HR**: Oracle APEX/ORDS GenAI Module (GET with prompt)
 - **Finance**: Oracle Fusion BI Publisher SOAP (ExternalReportWSSService, returns base64 PDF)
 - **Orders**: Oracle Fusion Cloud SCM REST (Sales Orders list/detail)
 - **Reports**: Oracle Analytics Cloud Workbook Export (OAC, 30s wait + download retries)
 
 Each advisor has a dedicated function in `AskMeChatBot.py` and can be extended with new endpoints or logic.
 
+### General Agent Dual-Mode Architecture
+
+The General agent intelligently routes queries based on content analysis:
+
+**Mode 1: Database/Data Queries (ORDS NL2SQL)**
+- Detects keywords: list, show, get, find, count, sum, average, table, database, record, data, customer, employee, product, etc. (30+ keywords)
+- Routes to: `https://g741db48c41b919-atpdb.adb.ap-hyderabad-1.oraclecloudapps.com/ords/select_ai_user/genai_module/query`
+- Authentication: Optional (public endpoint works without credentials)
+- Example queries: "List all customers", "Show employee count", "Get product inventory"
+
+**Mode 2: General Knowledge (OCI Gen AI Inference)**
+- Detects non-database queries: definitions, explanations, educational content
+- Model: `cohere.command-plus-latest`
+- Region: `us-ashburn-1` (configurable via GENAI_REGION)
+- Parameters: max_tokens=500, temperature=0.7, top_p=0.75
+- Example queries: "Explain cloud computing", "What is machine learning?", "How does OAuth work?"
+
+**Fallback Chain:**
+1. Primary mode (ORDS if database query, Gen AI if knowledge query)
+2. Alternate mode (try Gen AI if ORDS fails, or vice versa)
+3. Keyword-based responses (6 built-in responses for help, capabilities, services, etc.)
+4. Generic error message
+
+**Implementation Function:** `get_general_advice(query: str)` in `AskMeChatBot.py`
+
+**Configuration:**
+```properties
+# config.properties
+genai_region=us-ashburn-1          # OCI Gen AI region
+genai_intent_mode=auto             # Enable keyword fallbacks
+ords_genai_endpoint=https://...   # ORDS NL2SQL endpoint
+ords_use_credentials=false         # Optional auth for ORDS
+```
+
 ---
 
 ## 3. Intent Routing Logic
 
-- **OCI Gen AI (Chicago region)**: If enabled and available, the app uses Cohere Command R Plus via OCI Generative AI Inference to classify the user prompt and select a single advisor.
+- **OCI Gen AI (Ashburn region)**: If enabled and available, the app uses Cohere Command R Plus via OCI Generative AI Inference (us-ashburn-1, configurable) to classify the user prompt and select a single advisor.
 - **Keyword-based fallback**: If Gen AI is disabled, unavailable, or inconclusive, the app uses keyword matching to route to one or more advisors.
 - **Configurable mode**: Controlled by `genai_intent_mode` in `config.properties` (`auto`, `force`, `off`).
 
 **Key function:** `process_user_query(prompt)`
+
+**Region Configuration:**
+- Default region: `us-ashburn-1`
+- Configurable via: `GENAI_REGION` environment variable or `genai_region` in config.properties
+- Endpoint: `https://inference.generativeai.us-ashburn-1.oci.oraclecloud.com`
 
 ---
 
@@ -71,7 +116,7 @@ Each advisor has a dedicated function in `AskMeChatBot.py` and can be extended w
 
 - Logs to both console and `app.log` (INFO level).
 - Key log lines:
-  - `OCI Gen AI client initialized successfully for Chicago region`
+  - `OCI Gen AI client initialized successfully for Ashburn region (us-ashburn-1)`
   - `Gen AI intent routing mode: auto|force|off`
   - `Attempting OCI Gen AI intent detection...` and `Gen AI detection result: <intent>`
   - `Using keyword-based routing (Gen AI not available or failed)`

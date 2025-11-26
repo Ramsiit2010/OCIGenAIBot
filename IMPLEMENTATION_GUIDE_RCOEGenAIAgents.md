@@ -119,7 +119,7 @@ openssl rsa -pubout -outform DER -in ~/.oci/oci_api_key.pem | openssl md5 -c
 #### Enable Gen AI Service
 
 1. Navigate to: Analytics & AI → Generative AI
-2. Ensure service is enabled in **us-chicago-1** region
+2. Ensure service is enabled in **us-ashburn-1** region (default, configurable)
 3. Verify access to `cohere.command-plus-latest` model
 
 ### 4. Backend API Access
@@ -174,7 +174,7 @@ Edit `config.properties`:
 
 ```properties
 # OCI Gen AI Configuration
-genai_region=us-chicago-1
+genai_region=us-ashburn-1
 genai_intent_mode=force              # force (always use GenAI) | auto | off
 
 # API Settings
@@ -299,6 +299,193 @@ class MCPServer(ABC):
             "registered_at": self.registered_at
         }
 ```
+
+---
+
+### General MCP Server - Dual-Mode Architecture
+
+The General MCP Server implements intelligent query routing with dual capabilities:
+
+#### Architecture Overview
+
+**Mode 1: Database/Data Queries (ORDS NL2SQL)**
+- Endpoint: `https://g741db48c41b919-atpdb.adb.ap-hyderabad-1.oraclecloudapps.com/ords/select_ai_user/genai_module/query`
+- Purpose: Natural language to SQL translation for data queries
+- Authentication: Optional (public endpoint works without credentials)
+- Detection: 30+ database keywords (list, show, get, find, count, sum, average, table, database, etc.)
+
+**Mode 2: General Knowledge (via parent routing)**
+- When database keywords not detected, parent `RCOEGenAIAgents.py` calls OCI Gen AI Inference directly
+- Model: `cohere.command-plus-latest`
+- Region: `us-ashburn-1` (configurable)
+- Parameters: max_tokens=500, temperature=0.7, top_p=0.75
+
+**Fallback Chain:**
+1. Attempt primary mode based on query type
+2. Try alternate mode if primary fails
+3. Use keyword-based responses (6 built-in responses)
+4. Return generic error
+
+#### Implementation Details
+
+**File: `mcp_servers/advisors.py` - GeneralMCPServer class**
+
+```python
+class GeneralMCPServer(MCPServer):
+    """General Advisor MCP Server - Dual-mode with ORDS NL2SQL and keyword fallbacks"""
+    
+    def __init__(self, config: dict, api_spec: dict):
+        super().__init__(config, api_spec)
+        self.name = "General Advisor"
+        
+        # Database keywords for ORDS routing
+        self.database_keywords = [
+            'list', 'show', 'get', 'find', 'count', 'sum', 'average',
+            'table', 'database', 'record', 'data', 'customer', 'employee',
+            'product', 'item', 'all', 'total', 'how many', 'sql', 'translate'
+        ]
+        
+        # Keyword-based responses for common queries
+        self.general_keyword_responses = {
+            'help': 'I can assist with database queries (list, count, find) and general knowledge questions...',
+            'capabilities': 'I can help with:\n1. Database queries (NL2SQL)\n2. General knowledge...',
+            'services': 'Available services: Finance, HR, Orders, Reports, General assistance',
+            'nlp': 'I use OCI Gen AI for natural language processing...',
+            'nlp2sql': 'I can translate your questions into SQL queries...',
+            'what can you do': 'I can answer database queries and general knowledge questions...'
+        }
+    
+    def handle_request(self, query: str) -> str:
+        """Process general queries with dual-mode routing"""
+        # Check for keyword fallback first
+        query_lower = query.lower()
+        for keyword, response in self.general_keyword_responses.items():
+            if keyword in query_lower:
+                return response
+        
+        # Check if database query
+        is_database_query = any(kw in query_lower for kw in self.database_keywords)
+        
+        if is_database_query:
+            # Route to ORDS NL2SQL
+            response = self._call_ords_nl2sql(query)
+            if response:
+                return self._format_response(response)
+        
+        # Non-database queries are handled by parent RCOEGenAIAgents.py
+        # via direct Gen AI call, so return instruction
+        return "ROUTE_TO_GENAI"
+    
+    def _call_ords_nl2sql(self, query: str) -> dict:
+        """Call ORDS GenAI NL2SQL endpoint"""
+        url = self.config.get('general_agent_url')
+        use_credentials = self.config.get('ords_use_credentials', 'false').lower() == 'true'
+        
+        payload = {"prompt": query}
+        
+        try:
+            if use_credentials:
+                username = self.config.get('general_agent_username')
+                password = self.config.get('general_agent_password')
+                response = requests.post(url, json=payload, 
+                                       auth=HTTPBasicAuth(username, password), 
+                                       timeout=30)
+            else:
+                response = requests.post(url, json=payload, timeout=30)
+            
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            self.logger.error(f"ORDS NL2SQL error: {e}")
+            return None
+    
+    def _format_response(self, response: dict) -> str:
+        """Format ORDS response with pagination for large lists"""
+        # Handle array responses
+        if isinstance(response, list):
+            if len(response) > 10:
+                formatted = '\n'.join([str(item) for item in response[:10]])
+                return f"{formatted}\n\n(Showing top 10 of {len(response)} records)"
+            else:
+                return '\n'.join([str(item) for item in response])
+        
+        # Handle nested object responses
+        if isinstance(response, dict):
+            for field in ['query_result', 'response', 'reply', 'answer']:
+                if field in response:
+                    return str(response[field])
+        
+        return str(response)
+```
+
+#### Parent Routing Logic
+
+**File: `RCOEGenAIAgents.py` - route_to_mcp_server() function**
+
+When detected_intent is 'general', the parent performs additional intelligence:
+
+```python
+if detected_intent == 'general':
+    # Check if database query
+    database_keywords = ['list', 'show', 'get', 'find', 'count', ...]
+    is_database_query = any(k in prompt.lower() for k in database_keywords)
+    
+    if is_database_query:
+        # Route to General MCP Server for ORDS NL2SQL
+        response = server.handle_request(prompt)
+    else:
+        # Direct call to OCI Gen AI Inference for knowledge questions
+        if genai_client:
+            chat_response = genai_client.chat(chat_details)
+            response = chat_response.data.chat_response.text.strip()
+        else:
+            # Fallback to MCP server keyword responses
+            response = server.handle_request(prompt)
+```
+
+#### Configuration
+
+**config.properties:**
+```properties
+# General Agent - Dual Mode
+general_agent_url=https://g741db48c41b919-atpdb.adb.ap-hyderabad-1.oraclecloudapps.com/ords/select_ai_user/genai_module/query
+ords_use_credentials=false         # Optional authentication
+general_agent_username=            # Only if ords_use_credentials=true
+general_agent_password=            # Only if ords_use_credentials=true
+
+# OCI Gen AI for knowledge questions
+genai_region=us-ashburn-1          # Default region
+genai_intent_mode=force            # Pure Gen AI intent detection
+```
+
+#### Testing Examples
+
+**Database Query (ORDS NL2SQL):**
+```bash
+curl -X POST http://localhost:5001/api/v1/chat/rcoe \
+  -H "Content-Type: application/json" \
+  -d '{"message": "List all customers from the database"}'
+```
+
+**Knowledge Question (Gen AI Inference):**
+```bash
+curl -X POST http://localhost:5001/api/v1/chat/rcoe \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Explain what cloud computing is"}'
+```
+
+#### Benefits
+
+| Feature | Database Queries (ORDS) | Knowledge Questions (Gen AI) |
+|---------|------------------------|------------------------------|
+| Data Access | ✅ Real database queries | ❌ No data access |
+| Latest Info | ✅ Live database data | ❌ Model cutoff date |
+| Explanations | ❌ Raw data only | ✅ Detailed explanations |
+| Learning | ❌ No reasoning | ✅ Educational content |
+
+For complete architecture details, see [GENERAL_AGENT_ARCHITECTURE.md](GENERAL_AGENT_ARCHITECTURE.md)
+
+---
 
 ### Implementing a Concrete MCP Server
 
@@ -447,7 +634,7 @@ oci_config = {
     'key_file': os.path.expanduser(os.getenv('OCI_KEY_FILE')),
     'fingerprint': os.getenv('OCI_FINGERPRINT'),
     'tenancy': os.getenv('OCI_TENANCY'),
-    'region': CONFIG.get('genai_region', 'us-chicago-1')
+    'region': CONFIG.get('genai_region', 'us-ashburn-1')
 }
 
 genai_client = GenerativeAiInferenceClient(
@@ -741,7 +928,7 @@ Expected output:
     {"name": "Reports Advisor", "status": "registered"}
   ],
   "genai_enabled": true,
-  "genai_region": "us-chicago-1"
+  "genai_region": "us-ashburn-1"
 }
 ```
 
@@ -1040,7 +1227,7 @@ session.mount('https://', adapter)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `genai_region` | string | us-chicago-1 | OCI Gen AI region |
+| `genai_region` | string | us-ashburn-1 | OCI Gen AI region (default) |
 | `genai_intent_mode` | string | auto | force\|auto\|off |
 | `use_mock_responses` | boolean | false | Enable mock mode |
 | `api_timeout` | integer | 30 | API timeout in seconds |

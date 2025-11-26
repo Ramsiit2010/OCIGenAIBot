@@ -30,14 +30,48 @@ class GeneralMCPServer(MCPServer):
         self.username = config.get('general_agent_username')
         self.password = config.get('general_agent_password')
         self.timeout = int(config.get('api_timeout', '30'))
+        # Keyword responses for consistency with AskMeChatBot
+        self.general_keyword_responses = {
+            'help': (
+                "I am a General Agent that can assist you with Finance, HR, Orders, or Reports queries. "
+                "I can route your questions to specialized advisors or provide general information."
+            ),
+            'capabilities': (
+                "I can help you with:\n• Financial queries (revenue, budgets, expenses)\n"
+                "• HR policies (benefits, leave, work policies)\n"
+                "• Order management (status, inventory, returns)\n"
+                "• Analytics reports and OAC exports"
+            ),
+            'services': (
+                "Our advisory system provides specialized assistance through dedicated agents for Finance, HR, Orders, and Reports."
+            ),
+            'what can you do': (
+                "I can answer general questions, translate natural language to SQL for data queries, and route to specialized advisors."
+            ),
+            'nlp': (
+                "I can translate natural language into SQL and run it against configured datasets."
+            ),
+            'nlp2sql': (
+                "I support NL2SQL via the ORDS GenAI Module; ask things like 'List all customers'."
+            )
+        }
+        self.database_keywords = [
+            'list', 'show', 'get', 'find', 'search', 'query', 'select', 'count', 'sum', 'average',
+            'table', 'database', 'record', 'data', 'customer', 'employee', 'product', 'item',
+            'all', 'total', 'how many', 'sql', 'translate'
+        ]
     
     def handle_request(self, query: str) -> str:
         """Handle general queries via ORDS GenAI Module"""
         logger.info(f"[General MCP] Processing: {query}")
         
         if self.use_mock or not self.url:
-            logger.info("[General MCP] Using mock response")
-            return "I am a General Agent that can assist you with Finance, HR, Orders, or Reports queries. I can route your questions to specialized advisors or provide general information."
+            logger.info("[General MCP] Using mock/keyword response (ORDS not configured or mock enabled)")
+            ql = query.lower()
+            for kw, resp in self.general_keyword_responses.items():
+                if kw in ql:
+                    return resp
+            return self.general_keyword_responses['help']
         
         try:
             params = {"prompt": query}
@@ -49,13 +83,38 @@ class GeneralMCPServer(MCPServer):
             
             if resp.status_code == 200:
                 data = resp.json()
+                # Handle array results (tabular records)
+                if isinstance(data, list) and len(data) > 0:
+                    top_items = data[:10]
+                    formatted = []
+                    for idx, item in enumerate(top_items, 1):
+                        item_str = f"{idx}. " + ", ".join([f"{k}: {v}" for k, v in item.items()])
+                        formatted.append(item_str)
+                    result_text = "\n".join(formatted)
+                    if len(data) > 10:
+                        result_text += f"\n\n💡 Showing first 10 of {len(data)} records."
+                    return result_text
+
+                # Handle object with known fields
                 result = data.get('query_result', data.get('response', data.get('reply', data.get('answer'))))
                 if result:
                     logger.info("[General MCP] API call successful")
                     return result
-            
+
+                # If empty or unexpected, try keyword fallback
+                ql = query.lower()
+                for kw, resp_text in self.general_keyword_responses.items():
+                    if kw in ql:
+                        return resp_text
+                return "General agent did not return content for this query. Please refine your question."
+
             logger.warning(f"[General MCP] API returned {resp.status_code}")
-            return "General agent API unavailable. Please try again."
+            # Fallback to keyword responses on error
+            ql = query.lower()
+            for kw, resp_text in self.general_keyword_responses.items():
+                if kw in ql:
+                    return resp_text
+            return "General agent API unavailable. Please try again later."
         except Exception as e:
             logger.error(f"[General MCP] Error: {e}")
             return f"General agent error: {str(e)}"

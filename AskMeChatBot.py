@@ -590,24 +590,81 @@ def get_orders_advice(query: str) -> str:
         return f"Orders API error: {str(e)}"
 
 def get_general_advice(query: str) -> str:
-    """General Agent - calls API or returns mock response for general queries"""
+    """General Agent - handles both database queries (via ORDS NL2SQL) and general knowledge (via OCI Gen AI)"""
     logger.info(f"General agent processing query: {query}")
     
-    # Try API call first
-    api_response = call_agent_api('general', query)
-    if api_response:
-        return api_response
+    # Detect if this is a database/data query (NL2SQL scenario)
+    database_keywords = [
+        'list', 'show', 'get', 'find', 'search', 'query', 'select', 'count', 'sum', 'average',
+        'table', 'database', 'record', 'data', 'customer', 'employee', 'product', 'item',
+        'all', 'total', 'how many', 'sql', 'translate'
+    ]
     
-    # Fall back to mock responses
     query_lower = query.lower()
-    for keyword, response in MOCK_RESPONSES["general"].items():
-        if keyword in query_lower:
-            logger.info(f"General agent matched keyword: {keyword}")
-            return response
+    is_database_query = any(keyword in query_lower for keyword in database_keywords)
     
-    # Default general response
-    logger.info("General agent using default response")
-    return MOCK_RESPONSES["general"]["help"]  # Default response
+    # Try ORDS GenAI Module first for database/NL2SQL queries
+    if is_database_query:
+        logger.info("Detected database query, attempting ORDS GenAI Module (NL2SQL)")
+        api_response = call_agent_api('general', query)
+        if api_response:
+            logger.info("ORDS GenAI Module successfully handled database query")
+            return api_response
+        else:
+            logger.info("ORDS GenAI Module not available or failed, trying OCI Gen AI as fallback")
+    
+    # Use OCI Gen AI Inference API for general knowledge questions or as fallback
+    if genai_client:
+        try:
+            if is_database_query:
+                logger.info("Using OCI Gen AI as fallback for database query")
+            else:
+                logger.info("Using OCI Gen AI Inference API for general knowledge question")
+            
+            # Create chat request with the user's query
+            chat_request = CohereChatRequest(
+                message=query,
+                max_tokens=500,
+                temperature=0.7,
+                frequency_penalty=0,
+                top_p=0.75,
+                top_k=0
+            )
+            
+            chat_details = ChatDetails(
+                serving_mode=OnDemandServingMode(
+                    model_id=GENAI_MODEL_ID
+                ),
+                compartment_id=os.getenv('OCI_TENANCY'),
+                chat_request=chat_request
+            )
+            
+            logger.info(f"Calling OCI Gen AI with model: {GENAI_MODEL_ID}")
+            response = genai_client.chat(chat_details)
+            
+            # Extract the response
+            if response.data and response.data.chat_response:
+                answer = response.data.chat_response.text.strip()
+                logger.info(f"OCI Gen AI response received (length: {len(answer)} chars)")
+                return answer
+            else:
+                logger.warning("No response from OCI Gen AI")
+                return "I apologize, but I couldn't generate a response at this time. Please try again."
+                
+        except Exception as e:
+            logger.error(f"Error calling OCI Gen AI: {e}")
+            return f"I encountered an error while processing your question: {str(e)}"
+    else:
+        # Fallback if Gen AI client not available
+        logger.warning("OCI Gen AI client not available, using fallback response")
+        for keyword, response in MOCK_RESPONSES["general"].items():
+            if keyword in query_lower:
+                logger.info(f"General agent matched keyword: {keyword}")
+                return response
+        
+        # Default general response
+        logger.info("General agent using default response")
+        return MOCK_RESPONSES["general"]["help"]
 
 def get_reports_advice(query: str) -> str:
     """Reports Advisor - calls Oracle Analytics Cloud Workbook Export API or returns mock response"""
@@ -762,13 +819,13 @@ template = r"""
   </head>
   <body>
     <div class="container">
-        <div class="header">Enterprise Advisors</div>
+        <div class="header">RCOE Enterprise Advisors</div>
             <div style="padding:12px; background:#eef6ff; color:#064e8a;">
                 <strong>Hi there, how may I assist you today !!</strong><br><br>
-                Ask our advisors anything about Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
+                Ask our advisors anything about Your Data, Finance, HR, Sales, Analytic Reports  or get general help. <br> Choose a sample question to start quickly.
             </div>
                     <div style="padding:10px 12px; display:flex; gap:8px; flex-wrap:wrap; background:#fafafa;">
-                        <button onclick="selectSample('GENERAL: Translate to SQL: list all customers details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 General Help</button>
+                        <button onclick="selectSample('GENERAL: Translate to SQL: list all customers details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">🤖 Talk With Data </button>
                         <button onclick="selectSample('Show me Finance Reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📈 Finance Reports</button>
                         <button onclick="selectSample('List out all employee details ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">👥 Employee Reports </button>
                         <button onclick="selectSample('Show me sales Order reports ?')" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd; background:#fff; cursor:pointer">📦 Sales Reports</button>
@@ -781,6 +838,7 @@ template = r"""
         <button id="send">Send</button>
       </div>
       <div class="hint">Try: "What's our Finance Reports say ?" Or "Show me about all employee details"</div>
+      <div class="hint">🚀 Intelligent routing via OCI Gen AI </div>
     </div>
 
     <script>
