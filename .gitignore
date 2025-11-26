@@ -27,6 +27,10 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
+**/.venv/
+pip-wheel-metadata/
+**/pip-wheel-metadata/
 
 # IDEs
 .vscode/
