@@ -39,15 +39,20 @@ env/
 # Logs
 *.log
 app.log
+rcoe_genai_agents.log
 
-# Environment variables
+# Environment variables and API Keys
 .env
+oci_api_key.pem
+*.pem
+*.key
 
 # Oracle Wallet (sensitive)
 wallet/*.p12
 wallet/*.sso
 wallet/cwallet.*
 wallet/ewallet.*
+wallet/*.jks
 
 # Keep wallet directory but not sensitive files
 !wallet/.gitkeep
@@ -63,6 +68,9 @@ instance/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+
+# Jython and Python Cache
+.jython_cache/
 
 # pytest
 .pytest_cache/
