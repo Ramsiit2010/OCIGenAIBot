@@ -1,0 +1,15 @@
+# Exclude local/irrelevant files from Docker build context
+.venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.log
+.git/
+.gitignore
+.ipynb_checkpoints/
+*.ipynb
+# Large or secret folders not needed in the function image
+wallet/
+# OS/Editor junk
+.DS_Store
+Thumbs.db

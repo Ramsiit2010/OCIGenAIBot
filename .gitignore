@@ -45,6 +45,10 @@ pip-wheel-metadata/
 app.log
 rcoe_genai_agents.log
 
+# Test files (local testing only)
+test_replica_local.py
+test_*.py
+
 # Environment variables and API Keys
 .env
 oci_api_key.pem
@@ -65,6 +69,9 @@ wallet/*.jks
 # OS
 Thumbs.db
 .DS_Store
+
+# Docker (keep .dockerignore in repo for OCI Functions builds)
+# .dockerignore is intentionally NOT ignored - required for deployment
 
 # Flask
 instance/

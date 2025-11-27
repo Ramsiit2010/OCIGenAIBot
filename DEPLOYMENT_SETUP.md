@@ -136,71 +136,289 @@ wsl --install
 ### 2. Configure OCI CLI
 ```bash
 oci setup config
+# Follow prompts to configure:
+# - User OCID
+# - Tenancy OCID
+# - Region
+# - API Key
 ```
 
-### 3. Create OCI Functions Application
+### 3. Create OCI Gen AI Agent Endpoint
 
-**Using OCI Console:**
-1. Navigate to Developer Services → Functions
-2. Create Application:
-   - Name: `askme-chatbot-app` or `rcoe-genai-agents-app`
+1. **Navigate to OCI Console** → AI Services → Generative AI Agents
+
+2. **Create Agent**:
+   - Name: `multi-advisor-agent` or similar
+   - Model: `cohere.command-plus-latest`
+   - Region: `us-ashburn-1` (default, configurable)
+
+3. **Deploy Agent** and copy the **Agent Endpoint OCID**:
+   ```
+   ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
+   ```
+
+### 4. Create Functions Application
+
+**Option A: Using OCI Console**
+
+1. Navigate to **Developer Services** → **Functions**
+2. Click **Create Application**:
+   - Name: `askme-chatbot-app` (or `rcoe-genai-agents-app`)
    - VCN: Select your VCN
-   - Subnet: Select public or private subnet
+   - Subnet: Select a subnet with internet access
 3. Note the Application OCID
 
-**Using OCI CLI:**
+**Option B: Using OCI CLI**
+
 ```bash
+# For AskMeChatBot
 oci fn application create \
-  --compartment-id <compartment-ocid> \
+  --compartment-id ocid1.compartment.oc1..aaaaaa... \
   --display-name askme-chatbot-app \
-  --subnet-ids '["<subnet-ocid>"]'
+  --subnet-ids '["ocid1.subnet.oc1.iad.aaaaaa..."]'
+
+# For RCOEGenAIAgents
+oci fn application create \
+  --compartment-id ocid1.compartment.oc1..aaaaaa... \
+  --display-name rcoe-genai-agents-app \
+  --subnet-ids '["ocid1.subnet.oc1.iad.aaaaaa..."]'
 ```
 
-### 4. Create OCI Gen AI Agent Endpoint
+### 5. Configure Fn CLI Context
 
-1. Navigate to AI Services → Generative AI Agents
-2. Create Agent:
-   - Model: cohere.command-plus-latest
-   - Region: us-ashburn-1 (default)
-3. Deploy and note the `agentEndpointId`
+```bash
+# Get context info from Application page in OCI Console
+fn list contexts
 
-### 5. Update Function Configuration
+# Create new context
+fn create context <region-key> --provider oracle
 
-**Edit `func_askme.yaml` or `func_rcoe.yaml`:**
+# Set compartment
+fn update context oracle.compartment-id ocid1.compartment.oc1..aaaaaa...
+
+# Set API URL
+fn update context api-url https://functions.us-ashburn-1.oraclecloud.com
+
+# Set registry (OCIR)
+fn update context registry iad.ocir.io/<tenancy-namespace>/<repo-name>
+
+# Use the context
+fn use context <region-key>
+```
+
+### 6. Configure Docker for OCIR
+
+```bash
+# Login to OCIR (Oracle Cloud Infrastructure Registry)
+docker login iad.ocir.io
+
+# Username: <tenancy-namespace>/<oci-username>
+# Password: <auth-token>
+```
+
+Generate auth token:
+1. OCI Console → User Settings → Auth Tokens
+2. Generate Token and copy it
+
+### 7. Update Function Configuration Files
+
+**Edit `func_askme.yaml`:**
 ```yaml
 config:
-  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaa...
-  genaiIntentMode: auto  # or force
+  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
+  genaiIntentMode: auto
   genaiRegion: us-ashburn-1
 ```
 
-### 6. Deploy Function
+**Edit `func_rcoe.yaml`:**
+```yaml
+config:
+  agentEndpointId: ocid1.genaiagentendpoint.oc1.us-ashburn-1.amaaaaaa...
+  genaiIntentMode: force
+  genaiRegion: us-ashburn-1
+```
+
+### 8. Create Dynamic Group for Resource Principal
+
+**OCI Console** → Identity → Dynamic Groups → Create
+
+**Name:** `functions-dynamic-group`
+
+**Matching Rule:**
+```
+ALL {resource.type = 'fnfunc', resource.compartment.id = 'ocid1.compartment.oc1..aaaaaa...'}
+```
+
+### 9. Create IAM Policy
+
+**OCI Console** → Identity → Policies → Create
+
+**Name:** `functions-genai-policy`
+
+**Statements:**
+```
+Allow dynamic-group functions-dynamic-group to use generative-ai-agent-endpoint in compartment <compartment-name>
+Allow dynamic-group functions-dynamic-group to manage generative-ai-agent-session in compartment <compartment-name>
+Allow dynamic-group functions-dynamic-group to read secret-family in compartment <compartment-name>
+```
+
+### 10. Deploy Functions
 
 **For AskMeChatBot:**
 ```bash
-cd OCIGenAIBot
-fn deploy --app askme-chatbot-app --local func_askme.py
+cd /path/to/OCIGenAIBot
+
+# Initialize function (first time only)
+fn init --runtime python askme-chatbot-fn
+# Copy func_askme.py to askme-chatbot-fn/func.py
+# Copy func_askme.yaml to askme-chatbot-fn/func.yaml
+
+# Deploy
+cd askme-chatbot-fn
+fn deploy --app askme-chatbot-app
+```
+
+**Alternative: Direct deploy (if files structured correctly)**
+```bash
+# Ensure func_askme.py and func_askme.yaml are in a folder
+mkdir -p fn-askme
+cp func_askme.py fn-askme/func.py
+cp func_askme.yaml fn-askme/func.yaml
+
+cd fn-askme
+fn deploy --app askme-chatbot-app --local
 ```
 
 **For RCOEGenAIAgents:**
 ```bash
-fn deploy --app rcoe-genai-agents-app --local func_rcoe.py
+mkdir -p fn-rcoe
+cp func_rcoe.py fn-rcoe/func.py
+cp func_rcoe.yaml fn-rcoe/func.yaml
+
+cd fn-rcoe
+fn deploy --app rcoe-genai-agents-app --local
 ```
 
-### 7. Test Function
+### 11. Test Function
 
 ```bash
-echo '{"sessionId":"test-001","prompt":"Show me finance reports"}' | \
-  fn invoke askme-chatbot-app askme-chatbot-fn
+# Get function OCID from OCI Console or CLI
+fn inspect function askme-chatbot-app askme-chatbot-fn
+
+# Invoke function
+echo '{
+  "sessionId": "test-session-001",
+  "prompt": "Show me the latest finance reports"
+}' | fn invoke askme-chatbot-app askme-chatbot-fn
 ```
 
-### 8. Configure API Gateway (Optional)
+**Expected Response:**
+```json
+{
+  "message": "Here are the finance reports...",
+  "sessionId": "test-session-001"
+}
+```
 
-Create API Gateway to expose function as REST endpoint:
+### 12. Configure API Gateway (Production)
+
+**1. Create API Gateway**
+
+**OCI Console** → Developer Services → API Gateway → Create
+
+- Name: `genai-chatbot-gateway`
+- Type: Public
+- Compartment: Select compartment
+- VCN & Subnet: Select
+
+**2. Create API Deployment**
+
+**Deployment Details:**
+- Name: `chatbot-v1`
+- Path Prefix: `/api/v1`
+
+**Route 1: AskMeChatBot**
+```
+Path: /chat/askme
+Methods: POST
+Backend Type: Oracle Functions
+Application: askme-chatbot-app
+Function: askme-chatbot-fn
+```
+
+**Route 2: RCOEGenAIAgents**
+```
+Path: /chat/rcoe
+Methods: POST
+Backend Type: Oracle Functions
+Application: rcoe-genai-agents-app
+Function: rcoe-genai-agents-app-fn
+```
+
+**3. Test via API Gateway**
+
 ```bash
-# Create deployment with POST /chat route
-# Point to Functions backend
+curl -X POST https://your-gateway-id.apigateway.us-ashburn-1.oci.customer-oci.com/api/v1/chat/askme \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sessionId": "web-session-001",
+    "prompt": "What are the latest sales orders?"
+  }'
 ```
+
+### 13. Configuration Management (OCI Vault)
+
+Store sensitive backend credentials in OCI Vault:
+
+1. **Create Vault** → OCI Console → Security → Vault
+2. **Create Secrets** for:
+   - Finance credentials
+   - Orders credentials
+   - Reports credentials
+
+3. **Update IAM Policy:**
+```
+Allow dynamic-group functions-dynamic-group to read secret-family in compartment <compartment-name>
+```
+
+4. **Modify Functions to Read Secrets:**
+```python
+import oci
+
+signer = oci.auth.signers.get_resource_principals_signer()
+secrets_client = oci.secrets.SecretsClient(config={}, signer=signer)
+
+# Retrieve secret
+secret_bundle = secrets_client.get_secret_bundle(
+    secret_id="ocid1.vaultsecret.oc1.iad.amaaa..."
+)
+secret_value = base64.b64decode(secret_bundle.data.secret_bundle_content.content).decode()
+```
+
+### 14. Monitoring and Logging
+
+**View Function Logs**
+
+**OCI Console:**
+1. Navigate to Functions → Applications → Your App → Function
+2. Click **Logs** tab
+3. View invocation logs in OCI Logging service
+
+**Using CLI:**
+```bash
+# Stream logs
+fn logs -f askme-chatbot-app askme-chatbot-fn
+```
+
+**Enable Metrics**
+
+Functions automatically emit metrics to OCI Monitoring:
+- Invocation count
+- Execution duration
+- Error count
+
+**View in Console:**
+OCI Console → Observability → Metrics Explorer
 
 ---
 
@@ -328,6 +546,45 @@ Stop-Process -Id <PID> -Force
 
 # Or use different port
 python AskMeChatBot.py --port 5001
+```
+
+### Issue: Function Deployment Fails
+
+**Error:** `cannot pull image`
+
+**Solution:**
+```bash
+# Verify Docker login
+docker login iad.ocir.io
+
+# Check OCIR path in func.yaml
+# Should be: iad.ocir.io/<tenancy-namespace>/<repo-name>
+```
+
+### Issue: Resource Principal Auth Fails
+
+**Error:** `Unable to get resource principal auth signer`
+
+**Solution:**
+1. Verify Dynamic Group includes your function
+2. Check IAM policy grants required permissions
+3. Ensure function is deployed in correct compartment
+
+### Issue: Agent Endpoint Not Found
+
+**Error:** `Agent endpoint not found`
+
+**Solution:**
+1. Verify `agentEndpointId` in `func.yaml` is correct
+2. Ensure agent is deployed and active
+3. Check IAM policy allows access to endpoint
+
+### Issue: Function Timeout Errors
+
+**Solution:**
+Increase timeout in `func.yaml`:
+```yaml
+timeout: 300  # 5 minutes for longer operations
 ```
 
 ### Issue: oci_api_key.pem Not Found
