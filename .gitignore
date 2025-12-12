@@ -90,3 +90,6 @@ instance/
 htmlcov/
 .coverage
 .coverage.*
+
+# GitHub Copilot instructions (do not commit)
+.github/copilot-instructions.md
